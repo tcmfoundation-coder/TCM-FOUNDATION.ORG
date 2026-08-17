@@ -1,0 +1,590 @@
+// TCM Foundation V1 — Prisma schema
+//
+// Translates the conceptual DB model in the plan (section 3) into a
+// concrete schema, organized by the same domains as the NestJS module map
+// (Identity, Content, Resources, Applications, Support Lab, Engagement,
+// Media, Audit). Two deliberate simplifications from the blueprint's
+// conceptual entity list, both scoped to keep V1 simple rather than
+// building speculative infrastructure (see plan section "Non-Negotiable
+// Rules": prefer simple maintainable solutions over premature complexity):
+//
+// 1. Role/Permission -> a closed `PrivilegedRole` enum, not dynamic tables.
+//    V1 has exactly four fixed roles (Public Visitor is anonymous/unstored,
+//    Content Editor, Administrator, Super Administrator) with no in-scope
+//    UI for creating custom roles or permissions. If dynamic RBAC becomes
+//    a real requirement later, this is a migration, not a v1 concern.
+// 2. TeamMember / BoardMember -> one `TeamMember` model with a `kind` enum
+//    (TEAM / BOARD / ADVISORY). They share an identical shape (name, title,
+//    bio, photo) in every V1 requirement; the admin CMS still presents them
+//    as separate managed lists by filtering on `kind`.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------
+// Identity domain
+// ---------------------------------------------------------------------
+
+model User {
+  id                         String    @id @default(cuid())
+  email                      String    @unique
+  passwordHash               String?
+  googleId                   String?   @unique
+  emailVerifiedAt            DateTime?
+  emailVerificationToken     String?   @unique
+  emailVerificationExpiresAt DateTime?
+  passwordResetToken         String?   @unique
+  passwordResetExpiresAt     DateTime?
+
+  mfaEnabled         Boolean   @default(false)
+  mfaSecretEncrypted String?
+  mfaEnrolledAt      DateTime?
+  // Brute-force protection on TOTP code entry (shared by login-verify and
+  // enrollment-verify, since both check the same secret). Reset on any
+  // successful code; a lock expires on its own via mfaLockedUntil rather
+  // than needing an admin unlock action.
+  mfaFailedAttempts  Int       @default(0)
+  mfaLockedUntil     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  roles                  UserRole[]              @relation("UserRoles")
+  roleAssignmentsMade    UserRole[]              @relation("RoleAssignedBy")
+  refreshTokens          RefreshToken[]
+  auditLogsAsActor       AuditLog[]              @relation("AuditActor")
+  mediaUploaded          Media[]                 @relation("MediaUploader")
+  pagesUpdated           Page[]                  @relation("PageUpdatedBy")
+  blogPostsAuthored      BlogPost[]              @relation("BlogAuthor")
+  articlesAuthored       Article[]               @relation("ArticleAuthor")
+  submissionsReviewed    ApplicationSubmission[] @relation("SubmissionReviewer")
+  supportRequestsHandled SupportRequest[]        @relation("SupportRequestHandler")
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+enum PrivilegedRole {
+  CONTENT_EDITOR
+  ADMINISTRATOR
+  SUPER_ADMINISTRATOR
+}
+
+enum UserRoleStatus {
+  PENDING_MFA
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
+// A role only reaches ACTIVE after the user completes TOTP MFA enrollment
+// (see plan section 4, Authentication & Authorization Model). A PENDING_MFA
+// grant left unconfirmed past PENDING_ROLE_EXPIRY_MS lazily flips to EXPIRED
+// (see RolesService) — it can never activate itself again; a Super
+// Administrator must explicitly reassign it.
+model UserRole {
+  id           String         @id @default(cuid())
+  userId       String
+  user         User           @relation("UserRoles", fields: [userId], references: [id], onDelete: Cascade)
+  role         PrivilegedRole
+  status       UserRoleStatus @default(PENDING_MFA)
+  assignedById String?
+  assignedBy   User?          @relation("RoleAssignedBy", fields: [assignedById], references: [id])
+  assignedAt   DateTime       @default(now())
+  activatedAt  DateTime?
+  revokedAt    DateTime?
+
+  @@unique([userId, role])
+}
+
+enum AuditAction {
+  ROLE_ASSIGNED
+  ROLE_ACTIVATED
+  ROLE_REVOKED
+  ROLE_ASSIGNMENT_EXPIRED
+  ADMIN_LOGIN_SUCCEEDED
+  ADMIN_LOGIN_FAILED
+  ADMIN_LOGOUT
+  MFA_VERIFICATION_SUCCEEDED
+  MFA_VERIFICATION_FAILED
+  AUTHORIZATION_DENIED
+  CONTENT_CREATED
+  CONTENT_UPDATED
+  CONTENT_DELETED
+  MEDIA_UPLOADED
+  MEDIA_DELETED
+  SUBMISSION_STATUS_CHANGED
+}
+
+// Append-only by convention (enforced in the service layer, not the DB) —
+// audit records must never be editable by ordinary application code.
+model AuditLog {
+  id         String      @id @default(cuid())
+  actorId    String?
+  actor      User?       @relation("AuditActor", fields: [actorId], references: [id])
+  action     AuditAction
+  entityType String
+  entityId   String?
+  before     Json?
+  after      Json?
+  ipAddress  String?
+  createdAt  DateTime    @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+}
+
+// ---------------------------------------------------------------------
+// Media domain
+// ---------------------------------------------------------------------
+
+enum MediaType {
+  IMAGE
+  DOCUMENT
+  VIDEO
+}
+
+// altText is required (not nullable) so it is structurally impossible to
+// publish an image without alternative text (plan section on Accessibility).
+model Media {
+  id                 String    @id @default(cuid())
+  cloudinaryPublicId String    @unique
+  secureUrl          String
+  type               MediaType
+  altText            String
+  width              Int?
+  height             Int?
+  uploadedById       String?
+  uploadedBy         User?     @relation("MediaUploader", fields: [uploadedById], references: [id])
+  createdAt          DateTime  @default(now())
+
+  programsAsHero     Program[]    @relation("ProgramHeroImage")
+  programGalleries   Program[]    @relation("ProgramGallery")
+  partnersAsLogo     Partner[]    @relation("PartnerLogo")
+  teamMembersAsPhoto TeamMember[] @relation("TeamMemberPhoto")
+  blogPostsAsCover   BlogPost[]   @relation("BlogPostCover")
+  articlesAsCover    Article[]    @relation("ArticleCover")
+  spotlightsAsCover  Spotlight[]  @relation("SpotlightCover")
+  downloadsAsFile    Download[]   @relation("DownloadFile")
+}
+
+// ---------------------------------------------------------------------
+// Content domain
+// ---------------------------------------------------------------------
+
+// Flexible block content for the small number of singleton marketing pages
+// (home, about, get-involved, contact intro copy). Exact block shape is a
+// Phase 4 concern; storing as Json avoids a schema migration every time a
+// content block is added or reordered.
+model Page {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  data        Json
+  updatedById String?
+  updatedBy   User?    @relation("PageUpdatedBy", fields: [updatedById], references: [id])
+  updatedAt   DateTime @updatedAt
+}
+
+model Program {
+  id           String   @id @default(cuid())
+  slug         String   @unique
+  title        String
+  description  String
+  objectives   String?
+  audience     String?
+  impact       String?
+  ctaLabel     String?
+  ctaUrl       String?
+  heroImageId  String?
+  heroImage    Media?   @relation("ProgramHeroImage", fields: [heroImageId], references: [id])
+  galleryMedia Media[]  @relation("ProgramGallery")
+  isPublished  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+enum TeamMemberKind {
+  TEAM
+  BOARD
+  ADVISORY
+}
+
+model TeamMember {
+  id          String         @id @default(cuid())
+  kind        TeamMemberKind
+  name        String
+  title       String
+  bio         String?
+  photoId     String?
+  photo       Media?         @relation("TeamMemberPhoto", fields: [photoId], references: [id])
+  order       Int            @default(0)
+  isPublished Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([kind])
+}
+
+model Partner {
+  id          String   @id @default(cuid())
+  name        String
+  websiteUrl  String?
+  logoId      String?
+  logo        Media?   @relation("PartnerLogo", fields: [logoId], references: [id])
+  order       Int      @default(0)
+  isPublished Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Testimonial {
+  id         String   @id @default(cuid())
+  authorName String
+  authorRole String?
+  quote      String
+  isApproved Boolean  @default(false)
+  order      Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model FAQ {
+  id        String   @id @default(cuid())
+  question  String
+  answer    String
+  category  String?
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Homepage "Impact" numbers (Women Reached, Programs Delivered, etc. —
+// design brief section 5). A real, admin-manageable list rather than a
+// hardcoded set of stat labels, and never auto-populated with invented
+// figures — starts empty until TCM supplies real numbers.
+model ImpactStat {
+  id          String   @id @default(cuid())
+  label       String
+  value       Int
+  order       Int      @default(0)
+  isPublished Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model SocialLink {
+  id       String  @id @default(cuid())
+  platform String
+  url      String
+  order    Int     @default(0)
+  isActive Boolean @default(true)
+}
+
+// Singleton row (id is always "singleton") for nav/footer/TCM Hub popup /
+// newsletter / brand-token configuration managed from Admin > Settings.
+//
+// Externally-supplied URLs (tcmTvUrl, learningHubUrl, donateUrl) are typed
+// columns, not JSON keys — the "never invent this URL" rule (engineering
+// instruction) is much easier to enforce and audit on an explicit nullable
+// column than a key that may or may not exist inside a JSON blob. All three
+// start null; the frontend simply omits that nav/CTA item until set.
+model SiteSettings {
+  id               String   @id @default("singleton")
+  navigation       Json?
+  footer           Json?
+  newsletterConfig Json?
+  tcmHubPopup      Json?
+  brandTokens      Json?
+  tcmTvUrl         String?
+  learningHubUrl   String?
+  donateUrl        String?
+  contactEmail     String?
+  contactPhone     String?
+  tagline          String?
+  updatedAt        DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------
+// Resources domain
+// ---------------------------------------------------------------------
+
+enum CategoryAppliesTo {
+  BLOG
+  ARTICLE
+  SPOTLIGHT
+  OPPORTUNITY
+}
+
+model Category {
+  id        String            @id @default(cuid())
+  name      String
+  slug      String
+  appliesTo CategoryAppliesTo
+  createdAt DateTime          @default(now())
+
+  blogPosts     BlogPost[]    @relation("BlogPostCategories")
+  articles      Article[]     @relation("ArticleCategories")
+  spotlights    Spotlight[]   @relation("SpotlightCategories")
+  opportunities Opportunity[] @relation("OpportunityCategories")
+
+  @@unique([slug, appliesTo])
+}
+
+model Tag {
+  id   String @id @default(cuid())
+  name String @unique
+  slug String @unique
+
+  blogPosts  BlogPost[]  @relation("BlogPostTags")
+  articles   Article[]   @relation("ArticleTags")
+  spotlights Spotlight[] @relation("SpotlightTags")
+}
+
+model BlogPost {
+  id             String     @id @default(cuid())
+  slug           String     @unique
+  title          String
+  body           String
+  excerpt        String?
+  coverImageId   String?
+  coverImage     Media?     @relation("BlogPostCover", fields: [coverImageId], references: [id])
+  categories     Category[] @relation("BlogPostCategories")
+  tags           Tag[]      @relation("BlogPostTags")
+  authorId       String?
+  author         User?      @relation("BlogAuthor", fields: [authorId], references: [id])
+  seoTitle       String?
+  seoDescription String?
+  isPublished    Boolean    @default(false)
+  publishedAt    DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+}
+
+model Article {
+  id             String     @id @default(cuid())
+  slug           String     @unique
+  title          String
+  body           String
+  excerpt        String?
+  coverImageId   String?
+  coverImage     Media?     @relation("ArticleCover", fields: [coverImageId], references: [id])
+  categories     Category[] @relation("ArticleCategories")
+  tags           Tag[]      @relation("ArticleTags")
+  authorId       String?
+  author         User?      @relation("ArticleAuthor", fields: [authorId], references: [id])
+  seoTitle       String?
+  seoDescription String?
+  isPublished    Boolean    @default(false)
+  publishedAt    DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+}
+
+model Spotlight {
+  id             String     @id @default(cuid())
+  slug           String     @unique
+  subjectName    String
+  title          String
+  body           String
+  coverImageId   String?
+  coverImage     Media?     @relation("SpotlightCover", fields: [coverImageId], references: [id])
+  categories     Category[] @relation("SpotlightCategories")
+  tags           Tag[]      @relation("SpotlightTags")
+  seoTitle       String?
+  seoDescription String?
+  isPublished    Boolean    @default(false)
+  publishedAt    DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+}
+
+model Download {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  description String?
+  fileId      String
+  file        Media    @relation("DownloadFile", fields: [fileId], references: [id])
+  isPublished Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+enum OpportunityType {
+  CAREER
+  BUSINESS
+  EDUCATION
+}
+
+// externalApplyUrl only — Opportunities Desk links out, it never hosts an
+// application flow itself (that is Call for Applications, below).
+model Opportunity {
+  id               String          @id @default(cuid())
+  slug             String          @unique
+  title            String
+  description      String
+  type             OpportunityType
+  deadline         DateTime?
+  externalApplyUrl String
+  categories       Category[]      @relation("OpportunityCategories")
+  isPublished      Boolean         @default(true)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+}
+
+// ---------------------------------------------------------------------
+// Applications domain (Call for Applications)
+// ---------------------------------------------------------------------
+
+enum CallForApplicationStatus {
+  DRAFT
+  OPEN
+  CLOSED
+}
+
+model CallForApplication {
+  id          String                   @id @default(cuid())
+  slug        String                   @unique
+  title       String
+  programType String?
+  description String?
+  status      CallForApplicationStatus @default(DRAFT)
+  openDate    DateTime?
+  closeDate   DateTime?
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+
+  fields      ApplicationField[]
+  submissions ApplicationSubmission[]
+}
+
+enum ApplicationFieldType {
+  SHORT_TEXT
+  LONG_TEXT
+  EMAIL
+  PHONE
+  SINGLE_SELECT
+  MULTI_SELECT
+}
+
+// Lets each campaign define its own ad-hoc questions without a code
+// change — this is what "updated on adhoc basis" in the brief requires.
+model ApplicationField {
+  id                   String               @id @default(cuid())
+  callForApplicationId String
+  callForApplication   CallForApplication   @relation(fields: [callForApplicationId], references: [id], onDelete: Cascade)
+  label                String
+  fieldType            ApplicationFieldType
+  isRequired           Boolean              @default(true)
+  options              Json?
+  order                Int                  @default(0)
+}
+
+enum ApplicationSubmissionReviewStatus {
+  NEW
+  IN_REVIEW
+  ACCEPTED
+  REJECTED
+}
+
+model ApplicationSubmission {
+  id                   String                            @id @default(cuid())
+  callForApplicationId String
+  callForApplication   CallForApplication                @relation(fields: [callForApplicationId], references: [id], onDelete: Cascade)
+  applicantName        String
+  applicantEmail       String
+  answers              Json
+  reviewStatus         ApplicationSubmissionReviewStatus @default(NEW)
+  reviewedById         String?
+  reviewedBy           User?                             @relation("SubmissionReviewer", fields: [reviewedById], references: [id])
+  submittedAt          DateTime                          @default(now())
+
+  @@index([callForApplicationId])
+}
+
+// ---------------------------------------------------------------------
+// Support Lab domain
+// ---------------------------------------------------------------------
+
+model SupportService {
+  id          String           @id @default(cuid())
+  name        String
+  description String?
+  isActive    Boolean          @default(true)
+  order       Int              @default(0)
+  requests    SupportRequest[]
+}
+
+enum SupportRequestStatus {
+  NEW
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+model SupportRequest {
+  id             String               @id @default(cuid())
+  serviceId      String
+  service        SupportService       @relation(fields: [serviceId], references: [id])
+  requesterName  String
+  requesterEmail String
+  requesterPhone String?
+  message        String
+  status         SupportRequestStatus @default(NEW)
+  handledById    String?
+  handledBy      User?                @relation("SupportRequestHandler", fields: [handledById], references: [id])
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------
+// Engagement domain
+// ---------------------------------------------------------------------
+
+enum NewsletterSubscriberStatus {
+  SUBSCRIBED
+  UNSUBSCRIBED
+}
+
+model NewsletterSubscriber {
+  id             String                     @id @default(cuid())
+  email          String                     @unique
+  status         NewsletterSubscriberStatus @default(SUBSCRIBED)
+  subscribedAt   DateTime                   @default(now())
+  unsubscribedAt DateTime?
+}
+
+// General "Contact & Support" inquiry form. Not named explicitly in the
+// blueprint's conceptual entity list, but required by the explicit V1
+// feature (general contact form) — inferred and documented here rather
+// than left unmodeled.
+// Fields match the client-confirmed spec exactly (initial scope brief
+// comment): Full Name, Email Address, Phone Number (optional),
+// Organization (optional), Subject, Message.
+model ContactSubmission {
+  id           String   @id @default(cuid())
+  name         String
+  email        String
+  phone        String?
+  organization String?
+  subject      String
+  message      String
+  createdAt    DateTime @default(now())
+}

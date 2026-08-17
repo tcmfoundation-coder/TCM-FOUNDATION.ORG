@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #1c1c1c;
+
+  /*
+   * Brand purple scale, derived from the exact value in the client-supplied
+   * vector logo (apps/web/public/brand/tcm-logo-*.svg, confirmed
+   * 2026-08-16) at 500. Every pairing below is WCAG-AA-checked (most pass
+   * AAA): 700/900/950 on white all clear 8:1+; white on 600/700/900/950
+   * all clear 6.3:1+. See docs/design-system.md for the exact numbers.
+   */
+  --color-brand-50: #faf4fb;
+  --color-brand-100: #f3e6f5;
+  --color-brand-200: #e6c9e9;
+  --color-brand-300: #d3a1d8;
+  --color-brand-400: #bf76c6;
+  --color-brand-500: #83398a;
+  --color-brand-600: #94399d;
+  --color-brand-700: #782e7f;
+  --color-brand-800: #5f2565;
+  --color-brand-900: #471b4b;
+  --color-brand-950: #2e1231;
+
+  --color-brand-primary: var(--color-brand-500);
+  --color-brand-primary-foreground: #ffffff;
+  --color-brand-secondary: #4b4b4b;
+
+  /* Deep-plum surface for the footer and other dark, high-contrast
+     sections the brief calls for ("Dark plum/deep purple for important
+     sections") — not a dark-mode toggle, a deliberate design choice. */
+  --color-plum: var(--color-brand-950);
+  --color-plum-foreground: #ffffff;
+
+  /* Semantic colors — each ≥4.5:1 against white (AA for normal text). */
+  --color-success: #15803d;
+  --color-warning: #a16207;
+  --color-error: #b91c1c;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-brand-50: var(--color-brand-50);
+  --color-brand-100: var(--color-brand-100);
+  --color-brand-200: var(--color-brand-200);
+  --color-brand-300: var(--color-brand-300);
+  --color-brand-400: var(--color-brand-400);
+  --color-brand-500: var(--color-brand-500);
+  --color-brand-600: var(--color-brand-600);
+  --color-brand-700: var(--color-brand-700);
+  --color-brand-800: var(--color-brand-800);
+  --color-brand-900: var(--color-brand-900);
+  --color-brand-950: var(--color-brand-950);
+  --color-brand-primary: var(--color-brand-primary);
+  --color-brand-primary-foreground: var(--color-brand-primary-foreground);
+  --color-brand-secondary: var(--color-brand-secondary);
+
+  --color-plum: var(--color-plum);
+  --color-plum-foreground: var(--color-plum-foreground);
+
+  --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
+  --color-error: var(--color-error);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-fraunces);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* Respected by every animated component (StatCounter, reveals, hovers) —
+   see docs/design-system.md "Motion" section. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
