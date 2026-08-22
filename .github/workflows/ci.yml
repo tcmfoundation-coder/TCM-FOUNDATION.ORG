@@ -71,6 +71,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # `migrate deploy` only touches the database - it does NOT generate the
+      # client. Without this step @prisma/client resolves to the unpopulated
+      # stub, so generated enums (MediaType, CallForApplicationStatus) are
+      # undefined and Prisma.PrismaClientKnownRequestError does not exist.
+      # The verify job already does this; api-tests was missing it.
+      - name: Generate Prisma client
+        run: npx prisma generate --schema apps/api/prisma/schema.prisma
+
       - name: Apply migrations
         run: npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
 
