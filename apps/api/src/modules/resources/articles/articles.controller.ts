@@ -82,7 +82,11 @@ export class ArticlesController {
     return this.articles.update(id, dto, req.user!.id, req.ip);
   }
 
+  // Publishing changes the state of an existing resource; it does not
+  // create one, so 200 rather than Nest's POST default of 201. The
+  // PATCH variant of this same operation already returns 200.
   @Post(':id/publish')
+  @HttpCode(200)
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(
     PrivilegedRole.CONTENT_EDITOR,
@@ -94,6 +98,7 @@ export class ArticlesController {
   }
 
   @Post(':id/unpublish')
+  @HttpCode(200)
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(
     PrivilegedRole.CONTENT_EDITOR,
