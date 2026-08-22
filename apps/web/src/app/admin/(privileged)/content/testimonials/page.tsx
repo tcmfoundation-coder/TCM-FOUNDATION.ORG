@@ -1,11 +1,5 @@
-import { PlaceholderPage } from "@/components/placeholder-page";
+import { TestimonialsList } from "@/components/admin/testimonials-list";
 
 export default function AdminTestimonialsPage() {
-  return (
-    <PlaceholderPage
-      title="Manage Testimonials"
-      description="Manage approved testimonials."
-      phase="Phase 4"
-    />
-  );
+  return <TestimonialsList />;
 }

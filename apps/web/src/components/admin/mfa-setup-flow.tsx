@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -56,7 +57,13 @@ export function MfaSetupFlow() {
     setVerifyStatus("loading");
     try {
       await verifyMfaEnrollment(values.code);
+      // Same root cause as login-form.tsx/mfa-verify-form.tsx: admin/layout.tsx
+      // is a shared server layout across /admin/mfa-setup and /admin/dashboard,
+      // so a plain router.push() would leave the sidebar/header rendered from
+      // their pre-enrollment (no active role) state. refresh() invalidates
+      // that cached render without a full page reload.
       router.push("/admin/dashboard");
+      router.refresh();
     } catch {
       setVerifyStatus("error");
     }
@@ -66,9 +73,12 @@ export function MfaSetupFlow() {
     return (
       <Alert variant="info">
         Two-factor authentication is already set up for your account.{" "}
-        <a href="/admin/dashboard" className="underline">
+        {/* onClick alongside Link's own navigation: same stale-shared-layout
+            issue as the router.push() calls below — admin/layout.tsx won't
+            refetch on a plain client-side transition. */}
+        <Link href="/admin/dashboard" onClick={() => router.refresh()} className="underline">
           Go to dashboard
-        </a>
+        </Link>
         .
       </Alert>
     );

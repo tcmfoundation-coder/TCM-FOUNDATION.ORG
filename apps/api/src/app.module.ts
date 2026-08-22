@@ -5,6 +5,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { validateEnv } from './config/env.validation';
+import { MailModule } from './modules/mail/mail.module';
 import { PrismaModule } from './prisma/prisma.module';
 
 import { AuthModule } from './modules/identity/auth/auth.module';
@@ -36,6 +37,7 @@ import { SocialLinksModule } from './modules/engagement/social-links/social-link
 
 import { MediaModule } from './modules/media/media.module';
 import { AuditLogModule } from './modules/audit/audit.module';
+import { AuditModule } from './modules/audit/audit-api.module';
 
 @Module({
   imports: [
@@ -45,6 +47,7 @@ import { AuditLogModule } from './modules/audit/audit.module';
     }),
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     PrismaModule,
+    MailModule,
 
     // Identity domain
     AuthModule,
@@ -87,6 +90,7 @@ import { AuditLogModule } from './modules/audit/audit.module';
 
     // Audit domain
     AuditLogModule,
+    AuditModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],

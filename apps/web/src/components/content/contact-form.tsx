@@ -9,6 +9,7 @@ import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import { Button } from "../ui/button";
 import { Alert } from "../ui/alert";
+import { TurnstileWidget } from "../ui/turnstile-widget";
 import { submitContactForm } from "@/lib/api/contact";
 import { trackEvent } from "@/lib/analytics";
 
@@ -26,6 +27,7 @@ type Status = "idle" | "loading" | "success" | "server-error";
 
 export function ContactForm() {
   const [status, setStatus] = useState<Status>("idle");
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
@@ -36,7 +38,10 @@ export function ContactForm() {
   async function onSubmit(values: FormValues) {
     setStatus("loading");
     try {
-      await submitContactForm(values);
+      await submitContactForm({
+        ...values,
+        ...(turnstileToken ? { turnstileToken } : {}),
+      });
       trackEvent("contact_form_submitted");
       setStatus("success");
       reset();
@@ -68,6 +73,8 @@ export function ContactForm() {
 
       <Input label="Subject" error={errors.subject?.message} {...register("subject")} />
       <Textarea label="Message" error={errors.message?.message} {...register("message")} />
+
+      <TurnstileWidget onToken={setTurnstileToken} />
 
       <Button type="submit" disabled={status === "loading"} className="w-fit">
         {status === "loading" && <Loader2 aria-hidden="true" className="size-4 animate-spin" />}

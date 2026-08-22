@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { getSiteSettings } from "@/lib/api/site-settings";
 import { buttonStyles } from "./ui/button";
-import { ExternalLink } from "./ui/external-link";
 import { MobileNav, type NavItem } from "./mobile-nav";
+import { SiteNavLinks } from "./site-nav-links";
 
 // Matches the approved V1 route set (see plan section 6) — "Events" and
 // "Learning Hub" from the design brief map onto Programs and a conditional
@@ -37,28 +37,7 @@ export async function SiteHeader() {
           />
         </Link>
 
-        <nav aria-label="Primary" className="hidden items-center gap-6 md:flex">
-          {navItems.map((item) =>
-            item.external ? (
-              <ExternalLink
-                key={item.href}
-                href={item.href}
-                showIcon={false}
-                className="text-sm text-stone-700 hover:text-brand-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700"
-              >
-                {item.label}
-              </ExternalLink>
-            ) : (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="text-sm text-stone-700 hover:text-brand-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700"
-              >
-                {item.label}
-              </Link>
-            ),
-          )}
-        </nav>
+        <SiteNavLinks navItems={navItems} />
 
         <div className="hidden md:block">
           <Link href="/get-involved#donate" className={buttonStyles({ variant: "primary", size: "sm" })}>

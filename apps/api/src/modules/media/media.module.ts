@@ -1,8 +1,27 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { v2 as cloudinary } from 'cloudinary';
+import { MediaController } from './media.controller';
+import { MediaService } from './media.service';
+import { AuthModule } from '../identity/auth/auth.module';
 
-// Phase 2 (Backend/API Foundation) fills this in per the plan's API/Module
-// Map (section 5). Deliberately empty for now — no controllers/providers
-// means no endpoints exist yet, so there is nothing here that could be
-// mistaken for working functionality.
-@Module({})
+@Module({
+  imports: [AuthModule, ConfigModule],
+  controllers: [MediaController],
+  providers: [
+    MediaService,
+    {
+      provide: 'CLOUDINARY',
+      useFactory: (configService: ConfigService) => {
+        cloudinary.config({
+          cloud_name: configService.get<string>('CLOUDINARY_CLOUD_NAME'),
+          api_key: configService.get<string>('CLOUDINARY_API_KEY'),
+          api_secret: configService.get<string>('CLOUDINARY_API_SECRET'),
+        });
+        return cloudinary;
+      },
+      inject: [ConfigService],
+    },
+  ],
+})
 export class MediaModule {}

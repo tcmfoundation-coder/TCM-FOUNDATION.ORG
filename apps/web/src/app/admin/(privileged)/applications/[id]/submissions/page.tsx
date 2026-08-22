@@ -1,11 +1,8 @@
-import { PlaceholderPage } from "@/components/placeholder-page";
+import { ApplicationSubmissionsList } from "@/components/admin/application-submissions-list";
 
-export default function AdminApplicationSubmissionsPage() {
-  return (
-    <PlaceholderPage
-      title="Application Submissions"
-      description="Submissions for a single Call for Application campaign."
-      phase="Phase 4"
-    />
-  );
+export default async function AdminApplicationSubmissionsPage({
+  params,
+}: PageProps<"/admin/applications/[id]/submissions">) {
+  const { id } = await params;
+  return <ApplicationSubmissionsList callForApplicationId={id} />;
 }

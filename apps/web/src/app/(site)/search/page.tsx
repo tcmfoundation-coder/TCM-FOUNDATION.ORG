@@ -3,11 +3,13 @@ import Link from "next/link";
 import { Search as SearchIcon } from "lucide-react";
 import { search } from "@/lib/api/search";
 import { EmptyState } from "@/components/ui/empty-state";
+import { buildMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Search",
   description: "Search TCM Foundation's programs, resources, and opportunities.",
-};
+  path: "/search",
+});
 
 const TYPE_PATHS: Record<string, string> = {
   program: "/programs",
@@ -15,6 +17,7 @@ const TYPE_PATHS: Record<string, string> = {
   article: "/resources/articles",
   spotlight: "/resources/spotlights",
   opportunity: "/resources/opportunities",
+  "call-for-application": "/call-for-applications",
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -23,6 +26,7 @@ const TYPE_LABELS: Record<string, string> = {
   article: "Article",
   spotlight: "Spotlight",
   opportunity: "Opportunity",
+  "call-for-application": "Call for Applications",
 };
 
 export default async function SearchPage({ searchParams }: PageProps<"/search">) {

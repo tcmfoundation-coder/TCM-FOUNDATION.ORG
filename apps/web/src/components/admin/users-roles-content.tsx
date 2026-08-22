@@ -77,15 +77,12 @@ export function UsersRolesContent({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-medium text-stone-900">Users &amp; Roles</h1>
-          <p className="text-sm text-stone-600">
-            {canManage
-              ? "Manage staff accounts and privileged role assignment."
-              : "Staff accounts and their role status (view only)."}
-          </p>
-        </div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="max-w-2xl text-sm text-stone-600">
+          {canManage
+            ? "Manage staff accounts and privileged role assignment."
+            : "Staff accounts and their role status (view only)."}
+        </p>
         {canManage && (
           <Button size="sm" onClick={() => setCreateOpen(true)}>
             <Plus aria-hidden="true" className="size-4" />

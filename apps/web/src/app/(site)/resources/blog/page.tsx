@@ -4,14 +4,17 @@ import { listBlogPosts } from "@/lib/api/blog";
 import { ResourceCard } from "@/components/content/resource-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
+import { buildMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Blog",
   description: "Regular updates, thought pieces, tutorials, and reviews from TCM Foundation.",
-};
+  path: "/resources/blog",
+});
 
 export default async function BlogIndexPage() {
-  const posts = await listBlogPosts();
+  const response = await listBlogPosts();
+  const posts = Array.isArray(response) ? response : response?.items || [];
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-16 md:py-24">
@@ -31,6 +34,7 @@ export default async function BlogIndexPage() {
               title={post.title}
               excerpt={post.excerpt}
               date={post.publishedAt}
+              image={post.coverImage}
             />
           ))}
         </div>

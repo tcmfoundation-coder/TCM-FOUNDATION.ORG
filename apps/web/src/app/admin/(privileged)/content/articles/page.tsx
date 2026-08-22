@@ -1,11 +1,5 @@
-import { PlaceholderPage } from "@/components/placeholder-page";
+import { ArticlesList } from "@/components/admin/articles-list";
 
 export default function AdminArticlesPage() {
-  return (
-    <PlaceholderPage
-      title="Manage Articles"
-      description="Create and edit articles."
-      phase="Phase 4"
-    />
-  );
+  return <ArticlesList />;
 }

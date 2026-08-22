@@ -4,11 +4,13 @@ import { Download as DownloadIcon } from "lucide-react";
 import { listDownloads } from "@/lib/api/downloads";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
+import { buildMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Downloadable Materials",
   description: "Budget templates, CV templates, tax calculators, and other resources from TCM Foundation.",
-};
+  path: "/resources/downloads",
+});
 
 export default async function DownloadsIndexPage() {
   const downloads = await listDownloads();

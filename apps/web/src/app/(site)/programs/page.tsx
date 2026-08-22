@@ -3,14 +3,17 @@ import { Layers } from "lucide-react";
 import { listPrograms } from "@/lib/api/programs";
 import { ProgramCard } from "@/components/content/program-card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { buildMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Programs",
   description: "TCM Foundation's flagship impact programs.",
-};
+  path: "/programs",
+});
 
 export default async function ProgramsPage() {
-  const programs = await listPrograms();
+  const response = await listPrograms();
+  const programs = Array.isArray(response) ? response : response?.items || [];
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-16 md:py-24">

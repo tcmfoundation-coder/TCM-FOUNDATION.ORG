@@ -1,8 +1,13 @@
 import { Module } from '@nestjs/common';
+import { SupportRequestsController } from './support-requests.controller';
+import { SupportServicesController } from './support-services.controller';
+import { SupportLabService } from './support-lab.service';
+import { AuthModule } from '../identity/auth/auth.module';
+import { TurnstileModule } from '../security/turnstile/turnstile.module';
 
-// Phase 2 (Backend/API Foundation) fills this in per the plan's API/Module
-// Map (section 5). Deliberately empty for now — no controllers/providers
-// means no endpoints exist yet, so there is nothing here that could be
-// mistaken for working functionality.
-@Module({})
+@Module({
+  imports: [AuthModule, TurnstileModule],
+  controllers: [SupportRequestsController, SupportServicesController],
+  providers: [SupportLabService],
+})
 export class SupportLabModule {}

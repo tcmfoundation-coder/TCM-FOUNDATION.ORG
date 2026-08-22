@@ -19,10 +19,25 @@ export async function Partners() {
           description="TCM Foundation's partner and supporter logos will be published as they're approved."
         />
       ) : (
-        <div className="flex flex-wrap items-center justify-center gap-6">
-          {partners.map((partner) => (
-            <PartnerLogo key={partner.id} partner={partner} />
-          ))}
+        // Edge fade + a track holding two identical copies of the logo
+        // list, animated via the `marquee` keyframes in globals.css.
+        // Pausing on hover/focus lets a visitor stop the strip to read or
+        // click a specific logo instead of chasing a moving target — the
+        // second copy is aria-hidden + inert so keyboard/screen-reader
+        // users only ever encounter each partner once.
+        <div className="group relative overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_8%,black_92%,transparent)]">
+          <div className="flex w-max animate-[marquee_36s_linear_infinite] gap-12 group-hover:[animation-play-state:paused] group-focus-within:[animation-play-state:paused] motion-reduce:animate-none">
+            <div className="flex shrink-0 items-center gap-12">
+              {partners.map((partner) => (
+                <PartnerLogo key={partner.id} partner={partner} />
+              ))}
+            </div>
+            <div aria-hidden="true" inert className="flex shrink-0 items-center gap-12">
+              {partners.map((partner) => (
+                <PartnerLogo key={`repeat-${partner.id}`} partner={partner} />
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </section>

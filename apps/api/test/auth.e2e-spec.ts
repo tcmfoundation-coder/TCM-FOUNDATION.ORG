@@ -8,6 +8,11 @@ import { generate, generateSecret } from 'otplib';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { MfaService } from '../src/modules/identity/auth/mfa.service';
+import { hashToken } from '../src/modules/identity/auth/crypto.util';
+import {
+  MAIL_SERVICE,
+  type MailService,
+} from '../src/modules/mail/mail.service';
 
 /**
  * Covers the Phase 2 auth/authorization contract end-to-end against a real
@@ -275,5 +280,157 @@ describe('Auth + Roles (e2e)', () => {
       .post('/auth/refresh')
       .set('Cookie', originalRefresh);
     expect(replay.status).toBe(401);
+  });
+
+  it('requests a password reset, then resets the password with the emailed token (single-use, safe response)', async () => {
+    const email = `e2e-reset-${runId}@test.local`;
+    const password = 'E2eResetPassw0rd!!';
+    await createUserWithRole(email, password, 'ADMINISTRATOR');
+
+    const mail = app.get<MailService>(MAIL_SERVICE);
+    const sendSpy = jest.spyOn(mail, 'send');
+
+    const http = request(app.getHttpServer());
+
+    // Malformed input rejected.
+    await http
+      .post('/auth/request-password-reset')
+      .send({ email: 'not-an-email' })
+      .expect(400);
+
+    // A real account and a nonexistent one get the exact same response —
+    // this endpoint must never leak whether an email is registered.
+    const realRes = await http
+      .post('/auth/request-password-reset')
+      .send({ email });
+    const fakeRes = await http
+      .post('/auth/request-password-reset')
+      .send({ email: `nobody-${runId}@test.local` });
+    expect(realRes.status).toBe(200);
+    expect(fakeRes.status).toBe(200);
+    expect(realRes.body).toEqual(fakeRes.body);
+
+    // Only the real account actually triggers an email.
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+    const emailedText = (sendSpy.mock.calls[0][0] as { text: string }).text;
+    const match = emailedText.match(/https?:\/\/\S+/);
+    expect(match).toBeTruthy();
+    const token = new URL(match![0]).searchParams.get('token');
+    expect(token).toBeTruthy();
+
+    // A garbage token is rejected.
+    await http
+      .post('/auth/reset-password')
+      .send({ token: 'not-a-real-token', newPassword: 'NewResetPassw0rd1!' })
+      .expect(400);
+
+    // The real token succeeds.
+    const resetRes = await http
+      .post('/auth/reset-password')
+      .send({ token, newPassword: 'NewResetPassw0rd1!' });
+    expect(resetRes.status).toBe(200);
+
+    // Single-use: the same token cannot be replayed.
+    await http
+      .post('/auth/reset-password')
+      .send({ token, newPassword: 'AnotherPassw0rd123!' })
+      .expect(400);
+
+    // The old password no longer authenticates; the new one does.
+    await http.post('/auth/login').send({ email, password }).expect(401);
+    const loginRes = await http
+      .post('/auth/login')
+      .send({ email, password: 'NewResetPassw0rd1!' });
+    expect(loginRes.status).toBe(200);
+  });
+
+  it('rejects a password reset with an expired token', async () => {
+    const email = `e2e-reset-expired-${runId}@test.local`;
+    const password = 'E2eResetExpiredPassw0rd!!';
+    const user = await createUserWithRole(email, password, 'ADMINISTRATOR');
+
+    const rawToken = `expired-token-${runId}`;
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordResetToken: hashToken(rawToken),
+        passwordResetExpiresAt: new Date(Date.now() - 1000),
+      },
+    });
+
+    await request(app.getHttpServer())
+      .post('/auth/reset-password')
+      .send({ token: rawToken, newPassword: 'NewResetPassw0rd1!' })
+      .expect(400);
+  });
+
+  it('changes password when authenticated, requires the correct current password, rejects a weak new password, revokes sessions, and audits the change', async () => {
+    const email = `e2e-changepw-${runId}@test.local`;
+    const password = 'E2eChangePwPassw0rd!!';
+    await createUserWithRole(email, password, 'ADMINISTRATOR');
+
+    const http = request(app.getHttpServer());
+
+    // Requires authentication.
+    await http
+      .post('/auth/change-password')
+      .send({ currentPassword: password, newPassword: 'NewChangePw1234!!' })
+      .expect(401);
+
+    const loginRes = await http.post('/auth/login').send({ email, password });
+    const accessCookie = extractCookie(
+      loginRes.headers['set-cookie'],
+      'access_token',
+    );
+    const refreshCookie = extractCookie(
+      loginRes.headers['set-cookie'],
+      'refresh_token',
+    );
+    const authCookie = `${accessCookie}; ${refreshCookie}`;
+
+    // Wrong current password.
+    let res = await http
+      .post('/auth/change-password')
+      .set('Cookie', authCookie)
+      .send({
+        currentPassword: 'TotallyWrongPassword1!',
+        newPassword: 'NewChangePw1234!!',
+      });
+    expect(res.status).toBe(401);
+
+    // Weak new password rejected by DTO validation before anything changes.
+    res = await http
+      .post('/auth/change-password')
+      .set('Cookie', authCookie)
+      .send({ currentPassword: password, newPassword: 'short' });
+    expect(res.status).toBe(400);
+
+    // Valid change.
+    res = await http
+      .post('/auth/change-password')
+      .set('Cookie', authCookie)
+      .send({ currentPassword: password, newPassword: 'NewChangePw1234!!' });
+    expect(res.status).toBe(200);
+
+    // The refresh token issued at login is now revoked.
+    const refreshAfter = await http
+      .post('/auth/refresh')
+      .set('Cookie', refreshCookie);
+    expect(refreshAfter.status).toBe(401);
+
+    // The old password no longer authenticates; the new one does.
+    await http.post('/auth/login').send({ email, password }).expect(401);
+    const reLoginRes = await http
+      .post('/auth/login')
+      .send({ email, password: 'NewChangePw1234!!' });
+    expect(reLoginRes.status).toBe(200);
+
+    const auditEntry = await prisma.auditLog.findFirst({
+      where: { action: 'PASSWORD_CHANGED', entityType: 'User' },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(auditEntry).toBeTruthy();
+    expect(auditEntry?.after).toBeNull();
+    expect(auditEntry?.before).toBeNull();
   });
 });

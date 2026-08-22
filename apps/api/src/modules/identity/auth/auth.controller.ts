@@ -16,10 +16,15 @@ import { LoginDto } from './dto/login.dto';
 import { MfaLoginVerifyDto } from './dto/mfa-login-verify.dto';
 import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { MfaPendingGuard } from './guards/mfa-pending.guard';
 import { GoogleOAuthGuard } from './guards/google-oauth.guard';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GoogleUser } from './decorators/google-user.decorator';
+import { CurrentUser } from './decorators/current-user.decorator';
 import type { GoogleProfile } from './strategies/google.strategy';
+import type { AuthenticatedUser } from './guards/jwt-auth.guard';
 import { COOKIE_NAMES } from './auth.constants';
 
 @Controller('auth')
@@ -94,8 +99,8 @@ export class AuthController {
   }
 
   @Get('verify-email')
-  async verifyEmail(@Query('token') token: string) {
-    await this.auth.verifyEmail(token);
+  async verifyEmail(@Query() query: VerifyEmailDto) {
+    await this.auth.verifyEmail(query.token);
     return { success: true };
   }
 
@@ -112,6 +117,25 @@ export class AuthController {
   @HttpCode(200)
   async resetPassword(@Body() dto: ResetPasswordDto) {
     await this.auth.resetPassword(dto.token, dto.newPassword);
+    return { success: true };
+  }
+
+  @Post('change-password')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  async changePassword(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ChangePasswordDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    await this.auth.changePassword(
+      user.id,
+      dto.currentPassword,
+      dto.newPassword,
+      res,
+      req.ip,
+    );
     return { success: true };
   }
 

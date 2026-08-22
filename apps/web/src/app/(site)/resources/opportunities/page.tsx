@@ -6,11 +6,13 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink } from "@/components/ui/external-link";
+import { buildMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Opportunities Desk",
   description: "Curated grants, scholarships, fellowships, and competitions from TCM Foundation.",
-};
+  path: "/resources/opportunities",
+});
 
 const FILTERS: { label: string; value?: OpportunityType }[] = [
   { label: "All" },
@@ -24,7 +26,8 @@ export default async function OpportunitiesIndexPage({
 }: PageProps<"/resources/opportunities">) {
   const { type } = await searchParams;
   const selectedType = typeof type === "string" ? (type as OpportunityType) : undefined;
-  const opportunities = await listOpportunities(selectedType);
+  const response = await listOpportunities({ type: selectedType });
+  const opportunities = Array.isArray(response) ? response : response?.items || [];
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-16 md:py-24">

@@ -6,6 +6,10 @@ import { listSpotlights } from "@/lib/api/spotlights";
 import { listOpportunities } from "@/lib/api/opportunities";
 import { listDownloads } from "@/lib/api/downloads";
 
+// Same reasoning as (site)/layout.tsx: this route fetches live CMS slugs,
+// so it must not be generated once at build time.
+export const dynamic = "force-dynamic";
+
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
 const STATIC_ROUTES = [
@@ -43,12 +47,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }));
 
   const dynamicEntries: MetadataRoute.Sitemap = [
-    ...programs.map((p) => ({ url: `${SITE_URL}/programs/${p.slug}` })),
-    ...blogPosts.map((p) => ({ url: `${SITE_URL}/resources/blog/${p.slug}` })),
-    ...articles.map((p) => ({ url: `${SITE_URL}/resources/articles/${p.slug}` })),
-    ...spotlights.map((p) => ({ url: `${SITE_URL}/resources/spotlights/${p.slug}` })),
-    ...opportunities.map((p) => ({ url: `${SITE_URL}/resources/opportunities/${p.slug}` })),
-    ...downloads.map((p) => ({ url: `${SITE_URL}/resources/downloads/${p.slug}` })),
+    ...(Array.isArray(programs) ? programs : programs?.items || []).map((p) => ({ url: `${SITE_URL}/programs/${p.slug}` })),
+    ...(Array.isArray(blogPosts) ? blogPosts : blogPosts?.items || []).map((p) => ({ url: `${SITE_URL}/resources/blog/${p.slug}` })),
+    ...(Array.isArray(articles) ? articles : articles?.items || []).map((p) => ({ url: `${SITE_URL}/resources/articles/${p.slug}` })),
+    ...(Array.isArray(spotlights) ? spotlights : spotlights?.items || []).map((p) => ({ url: `${SITE_URL}/resources/spotlights/${p.slug}` })),
+    ...(Array.isArray(opportunities) ? opportunities : opportunities?.items || []).map((p) => ({ url: `${SITE_URL}/resources/opportunities/${p.slug}` })),
+    ...(Array.isArray(downloads) ? downloads : []).map((p) => ({ url: `${SITE_URL}/resources/downloads/${p.slug}` })),
   ];
 
   return [...staticEntries, ...dynamicEntries];

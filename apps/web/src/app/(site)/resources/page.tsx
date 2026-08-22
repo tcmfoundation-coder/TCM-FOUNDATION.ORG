@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BookOpen, Download, GraduationCap, Newspaper, Sparkles } from "lucide-react";
+import { buildMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Resources",
   description:
     "TCM Foundation's Knowledge & Insights hub — Blog, Spotlights, Articles, Downloadable Materials, and the Opportunities Desk.",
-};
+  path: "/resources",
+});
 
 const SECTIONS = [
   { href: "/resources/blog", icon: Newspaper, title: "Blog", description: "Regular updates, thought pieces, tutorials, and reviews." },

@@ -1,14 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Alert } from "../ui/alert";
+import { GoogleIcon } from "./google-icon";
 import { login } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api-client";
 
@@ -21,9 +23,19 @@ type FormValues = z.infer<typeof schema>;
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 
-export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
+const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
+  google_account_not_provisioned:
+    "No TCM Foundation account is linked to this Google account. Ask a Super Administrator to create one first.",
+};
+const GOOGLE_ERROR_FALLBACK = "Google sign-in failed. Please try again or sign in with your email and password.";
+
+export function LoginForm({ googleEnabled, googleError }: { googleEnabled: boolean; googleError?: string }) {
   const router = useRouter();
-  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "loading" | "error">(googleError ? "error" : "idle");
+  const [errorMessage, setErrorMessage] = useState<string>(
+    googleError ? (GOOGLE_ERROR_MESSAGES[googleError] ?? GOOGLE_ERROR_FALLBACK) : "",
+  );
+  const [showPassword, setShowPassword] = useState(false);
   const {
     register,
     handleSubmit,
@@ -34,8 +46,18 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
     setStatus("loading");
     try {
       const { mfaRequired } = await login(values.email, values.password);
-      router.push(mfaRequired ? "/admin/mfa-verify" : "/admin/dashboard");
+      if (mfaRequired) {
+        router.push("/admin/mfa-verify");
+        return;
+      }
+      // Sign-in without MFA. Same reasoning as mfa-verify-form.tsx: the
+      // login page redirects once a session exists, so refreshing the current
+      // route re-renders the shared admin layout with the new session and
+      // carries us to the dashboard in one server round trip. Pushing first
+      // would aim the refresh at the route being left.
+      router.refresh();
     } catch (error) {
+      setErrorMessage("Invalid email or password.");
       setStatus("error");
       if (!(error instanceof ApiError)) throw error;
     }
@@ -43,11 +65,43 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
 
   return (
     <div className="flex flex-col gap-6">
-      {status === "error" && <Alert variant="error">Invalid email or password.</Alert>}
+      {status === "error" && <Alert variant="error">{errorMessage}</Alert>}
 
       <form onSubmit={(e) => void handleSubmit(onSubmit)(e)} className="flex flex-col gap-5">
-        <Input label="Email Address" type="email" error={errors.email?.message} {...register("email")} />
-        <Input label="Password" type="password" error={errors.password?.message} {...register("password")} />
+        <Input
+          label="Email"
+          type="email"
+          placeholder="you@email.com"
+          error={errors.email?.message}
+          {...register("email")}
+        />
+        <div className="flex flex-col gap-2">
+          <Input
+            label="Password"
+            type={showPassword ? "text" : "password"}
+            placeholder="Enter your password"
+            error={errors.password?.message}
+            endAdornment={
+              <button
+                type="button"
+                onClick={() => setShowPassword((show) => !show)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                className="text-stone-400 hover:text-stone-600"
+              >
+                {showPassword ? (
+                  <EyeOff aria-hidden="true" className="size-4" />
+                ) : (
+                  <Eye aria-hidden="true" className="size-4" />
+                )}
+              </button>
+            }
+            {...register("password")}
+          />
+          <Link href="/admin/forgot-password" className="self-end text-sm text-brand-700 hover:text-brand-800">
+            Forgot password?
+          </Link>
+        </div>
+
         <Button type="submit" disabled={status === "loading"} className="justify-center">
           {status === "loading" && <Loader2 aria-hidden="true" className="size-4 animate-spin" />}
           Sign In
@@ -63,7 +117,8 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
           </div>
           <a href={`${API_BASE_URL}/auth/google`} className="w-full">
             <Button type="button" variant="secondary" className="w-full justify-center">
-              Sign in with Google
+              <GoogleIcon className="size-4" />
+              Continue with Google
             </Button>
           </a>
         </>

@@ -1,11 +1,5 @@
-import { PlaceholderPage } from "@/components/placeholder-page";
+import { PartnersList } from "@/components/admin/partners-list";
 
 export default function AdminPartnersPage() {
-  return (
-    <PlaceholderPage
-      title="Manage Partners"
-      description="Manage partner logos and links."
-      phase="Phase 4"
-    />
-  );
+  return <PartnersList />;
 }

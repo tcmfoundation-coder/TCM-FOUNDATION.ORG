@@ -1,6 +1,12 @@
 import { apiClient } from "../api-client";
 
-export type SearchResultType = "program" | "blog" | "article" | "spotlight" | "opportunity";
+export type SearchResultType =
+  | "program"
+  | "blog"
+  | "article"
+  | "spotlight"
+  | "opportunity"
+  | "call-for-application";
 
 export interface SearchResult {
   type: SearchResultType;

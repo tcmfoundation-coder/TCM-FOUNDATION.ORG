@@ -5,6 +5,8 @@ export interface MyRoles {
   email: string;
   mfaEnabled: boolean;
   mfaEnrolledAt: string | null;
+  emailVerifiedAt: string | null;
+  createdAt: string;
   roles: {
     role: string;
     status: "PENDING_MFA" | "ACTIVE" | "EXPIRED" | "REVOKED";

@@ -23,13 +23,17 @@ export function ExternalLink({ href, children, showIcon = true, className, onCli
   }
 
   return (
+    // The spread comes FIRST so target/rel genuinely are enforced. With the
+    // spread last, a caller passing `rel` would silently override it and this
+    // component's whole guarantee with it - no caller does that today, but the
+    // ordering is what makes the guarantee real rather than conventional.
     <a
+      {...props}
       href={href}
       target="_blank"
       rel="noopener noreferrer"
       onClick={handleClick}
       className={`inline-flex items-center gap-1.5 ${className ?? ""}`}
-      {...props}
     >
       {children}
       {showIcon && <ExternalLinkIcon aria-hidden="true" className="size-3.5 shrink-0" />}

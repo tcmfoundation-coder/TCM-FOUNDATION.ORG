@@ -53,7 +53,14 @@ export class RolesService {
     const [user, roles] = await Promise.all([
       this.prisma.user.findUniqueOrThrow({
         where: { id: userId },
-        select: { id: true, email: true, mfaEnabled: true, mfaEnrolledAt: true },
+        select: {
+          id: true,
+          email: true,
+          mfaEnabled: true,
+          mfaEnrolledAt: true,
+          emailVerifiedAt: true,
+          createdAt: true,
+        },
       }),
       this.prisma.userRole.findMany({
         where: { userId },
@@ -71,6 +78,8 @@ export class RolesService {
       email: user.email,
       mfaEnabled: user.mfaEnabled,
       mfaEnrolledAt: user.mfaEnrolledAt,
+      emailVerifiedAt: user.emailVerifiedAt,
+      createdAt: user.createdAt,
       roles,
     };
   }

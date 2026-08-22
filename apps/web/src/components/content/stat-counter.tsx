@@ -43,11 +43,11 @@ export function StatCounter({ value, label }: { value: number; label: string }) 
   }, [value]);
 
   return (
-    <div ref={ref} className="flex flex-col items-center gap-1 text-center">
-      <span className="font-display text-4xl font-medium text-brand-700 md:text-5xl">
+    <div ref={ref} className="flex flex-col items-center gap-2 text-center">
+      <span className="font-display text-5xl font-medium leading-none tracking-tight text-brand-700 md:text-6xl">
         {display.toLocaleString()}+
       </span>
-      <span className="text-sm text-stone-600">{label}</span>
+      <span className="max-w-[12rem] text-sm leading-relaxed text-stone-600">{label}</span>
     </div>
   );
 }

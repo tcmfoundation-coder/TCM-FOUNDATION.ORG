@@ -1,11 +1,5 @@
-import { PlaceholderPage } from "@/components/placeholder-page";
+import { BlogList } from "@/components/admin/blog-list";
 
 export default function AdminBlogPage() {
-  return (
-    <PlaceholderPage
-      title="Manage Blog"
-      description="Create and edit blog posts."
-      phase="Phase 4"
-    />
-  );
+  return <BlogList />;
 }

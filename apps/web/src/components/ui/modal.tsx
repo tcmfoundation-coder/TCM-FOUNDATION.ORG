@@ -29,7 +29,16 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
       onClose={onClose}
       onCancel={onClose}
       aria-labelledby="modal-title"
-      className="w-full max-w-md rounded-md border border-stone-200 p-0 shadow-xl backdrop:bg-stone-900/50"
+      // Browsers center a <dialog> shown via showModal() using their UA
+      // stylesheet's `margin: auto` — but Tailwind's preflight resets
+      // `margin: 0` on every element (including <dialog>), which silently
+      // cancels that centering and leaves the dialog pinned to the
+      // top-left of its `position: fixed` box. Centering explicitly here
+      // (rather than fighting preflight) fixes every dialog in the app at
+      // once, since they all render through this one component. The
+      // max-height + overflow lets long forms scroll inside the dialog
+      // instead of the dialog overflowing the viewport.
+      className="fixed top-1/2 left-1/2 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 max-h-[85vh] overflow-y-auto rounded-md border border-stone-200 p-0 shadow-xl backdrop:bg-stone-900/50"
     >
       <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
         <h2 id="modal-title" className="font-display text-lg font-medium">

@@ -2,7 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 
 export type SearchResultType =
-  'program' | 'blog' | 'article' | 'spotlight' | 'opportunity';
+  | 'program'
+  | 'blog'
+  | 'article'
+  | 'spotlight'
+  | 'opportunity'
+  | 'call-for-application';
 
 export interface SearchResult {
   type: SearchResultType;
@@ -23,34 +28,48 @@ export class SearchService {
 
     const contains = { contains: query, mode: 'insensitive' as const };
 
-    const [programs, blogPosts, articles, spotlights, opportunities] =
-      await Promise.all([
-        this.prisma.program.findMany({
-          where: { isPublished: true, title: contains },
-          select: { slug: true, title: true, description: true },
-          take: 10,
-        }),
-        this.prisma.blogPost.findMany({
-          where: { isPublished: true, title: contains },
-          select: { slug: true, title: true, excerpt: true },
-          take: 10,
-        }),
-        this.prisma.article.findMany({
-          where: { isPublished: true, title: contains },
-          select: { slug: true, title: true, excerpt: true },
-          take: 10,
-        }),
-        this.prisma.spotlight.findMany({
-          where: { isPublished: true, title: contains },
-          select: { slug: true, title: true, subjectName: true },
-          take: 10,
-        }),
-        this.prisma.opportunity.findMany({
-          where: { isPublished: true, title: contains },
-          select: { slug: true, title: true, description: true },
-          take: 10,
-        }),
-      ]);
+    const [
+      programs,
+      blogPosts,
+      articles,
+      spotlights,
+      opportunities,
+      callsForApplications,
+    ] = await Promise.all([
+      this.prisma.program.findMany({
+        where: { isPublished: true, title: contains },
+        select: { slug: true, title: true, description: true },
+        take: 10,
+      }),
+      this.prisma.blogPost.findMany({
+        where: { isPublished: true, title: contains },
+        select: { slug: true, title: true, excerpt: true },
+        take: 10,
+      }),
+      this.prisma.article.findMany({
+        where: { isPublished: true, title: contains },
+        select: { slug: true, title: true, excerpt: true },
+        take: 10,
+      }),
+      this.prisma.spotlight.findMany({
+        where: { isPublished: true, title: contains },
+        select: { slug: true, title: true, subjectName: true },
+        take: 10,
+      }),
+      this.prisma.opportunity.findMany({
+        where: { isPublished: true, title: contains },
+        select: { slug: true, title: true, description: true },
+        take: 10,
+      }),
+      // Campaigns use status rather than isPublished. Only OPEN ones are
+      // searchable, matching what `listPublic` exposes — a CLOSED campaign
+      // dropping out of search is correct, not a gap.
+      this.prisma.callForApplication.findMany({
+        where: { status: 'OPEN', title: contains },
+        select: { slug: true, title: true, description: true },
+        take: 10,
+      }),
+    ]);
 
     return [
       ...programs.map((p) => ({
@@ -79,6 +98,12 @@ export class SearchService {
       })),
       ...opportunities.map((p) => ({
         type: 'opportunity' as const,
+        slug: p.slug,
+        title: p.title,
+        excerpt: p.description,
+      })),
+      ...callsForApplications.map((p) => ({
+        type: 'call-for-application' as const,
         slug: p.slug,
         title: p.title,
         excerpt: p.description,

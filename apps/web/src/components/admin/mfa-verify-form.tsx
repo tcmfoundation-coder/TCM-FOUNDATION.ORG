@@ -29,8 +29,22 @@ export function MfaVerifyForm() {
   async function onSubmit(values: FormValues) {
     setStatus("loading");
     try {
+      // Awaited: the session cookies must be committed before anything asks
+      // the server who we are.
       await mfaLoginVerify(values.code);
-      router.push("/admin/dashboard");
+
+      // refresh() and nothing else. Per the Next.js docs refresh() re-renders
+      // *the current route*, which is still /admin/mfa-verify here - so the
+      // previous `push(); refresh();` pair sent the refresh at the page being
+      // left, re-rendering the 2FA route with the now-valid session. That is
+      // exactly what produced "sidebar appears, but the 2FA form is still in
+      // the main area": a freshly rendered shared layout wrapped around the
+      // mfa-verify page.
+      //
+      // Now the mfa-verify page itself redirects once a session exists, so
+      // this one refresh re-renders the shared layout AND lands on the
+      // dashboard, with no race between two router calls.
+      router.refresh();
     } catch {
       setStatus("error");
     }

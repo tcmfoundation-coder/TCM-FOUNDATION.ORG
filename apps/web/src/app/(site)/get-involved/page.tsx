@@ -3,12 +3,15 @@ import Link from "next/link";
 import { Heart } from "lucide-react";
 import { getSiteSettings } from "@/lib/api/site-settings";
 import { ExternalLink } from "@/components/ui/external-link";
+import { DonateVerse } from "@/components/content/donate-verse";
 import { buttonStyles } from "@/components/ui/button";
+import { buildMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Get Involved",
   description: "Donate, partner, volunteer, or explore careers with TCM Foundation.",
-};
+  path: "/get-involved",
+});
 
 function ActionSection({
   id,
@@ -45,21 +48,41 @@ export default async function GetInvolvedPage() {
         </h1>
       </div>
 
-      <ActionSection
-        id="donate"
-        title="Donate"
-        description="Your support helps TCM Foundation equip Muslim women with the knowledge, opportunities, and networks to thrive."
-      >
-        {settings.donateUrl ? (
-          <ExternalLink href={settings.donateUrl} showIcon={false} className={buttonStyles({ variant: "primary" })}>
-            Donate Now
-          </ExternalLink>
-        ) : (
-          <span className="rounded-sm border border-stone-200 px-5 py-2.5 text-sm font-medium text-stone-400">
-            Coming Soon
-          </span>
-        )}
-      </ActionSection>
+      {/* Donate is given its own composition rather than the shared
+          ActionSection: verse, then a beat, then what TCM actually does, then
+          the ask. The descriptive line is the section's existing approved copy,
+          used verbatim — how donations are spent is a claim TCM has not made,
+          so nothing here goes further than that sentence.
+
+          The CTA, its destination and the unconfigured fallback are unchanged. */}
+      <section id="donate" className="scroll-mt-24 border-b border-stone-200 py-12 first:pt-0">
+        <h2 className="font-display text-2xl font-medium text-stone-900 md:text-3xl">Donate</h2>
+
+        <div className="mt-7 flex flex-col gap-7">
+          <DonateVerse />
+
+          {/* The tone the brief asks for, said plainly: the verse is an
+              encouragement, not a demand made of the reader. */}
+          <p className="font-display text-lg text-stone-800 md:text-xl">An invitation &mdash; never an obligation.</p>
+
+          <p className="max-w-xl text-stone-600">
+            Your support helps TCM Foundation equip Muslim women with the knowledge, opportunities, and networks to
+            thrive.
+          </p>
+
+          <div>
+            {settings.donateUrl ? (
+              <ExternalLink href={settings.donateUrl} showIcon={false} className={buttonStyles({ variant: "primary" })}>
+                Donate Now
+              </ExternalLink>
+            ) : (
+              <span className="rounded-sm border border-stone-200 px-5 py-2.5 text-sm font-medium text-stone-500">
+                Coming Soon
+              </span>
+            )}
+          </div>
+        </div>
+      </section>
 
       <ActionSection
         id="partner"
@@ -78,6 +101,20 @@ export default async function GetInvolvedPage() {
       >
         <Link href="/contact" className={buttonStyles({ variant: "secondary" })}>
           Contact Us
+        </Link>
+      </ActionSection>
+
+      {/* Uses the same ActionSection pattern as every other entry here rather
+          than a bespoke block. The description states only what the page does -
+          campaign specifics live on the campaigns themselves, and inventing
+          eligibility or benefits here would be an unsupported claim. */}
+      <ActionSection
+        id="apply"
+        title="Call for Applications"
+        description="Open application opportunities from TCM Foundation. Each campaign lists its own details and deadline."
+      >
+        <Link href="/call-for-applications" className={buttonStyles({ variant: "secondary" })}>
+          View Open Applications
         </Link>
       </ActionSection>
 

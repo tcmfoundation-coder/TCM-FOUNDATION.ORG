@@ -1,11 +1,5 @@
-import { PlaceholderPage } from "@/components/placeholder-page";
+import { ProgramsList } from "@/components/admin/programs-list";
 
 export default function AdminProgramsPage() {
-  return (
-    <PlaceholderPage
-      title="Manage Programs"
-      description="Create and edit Flagship Impact Programs."
-      phase="Phase 4"
-    />
-  );
+  return <ProgramsList />;
 }

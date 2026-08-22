@@ -1,5 +1,7 @@
 import { serverAuthFetch } from "@/lib/server-auth-fetch";
-import { AdminNav } from "@/components/admin/admin-nav";
+import { AdminSidebar } from "@/components/admin/admin-sidebar";
+import { AdminHeader } from "@/components/admin/admin-header";
+import { Toaster } from "@/components/ui/toast";
 import type { MyRoles } from "@/lib/api/roles";
 
 // Chrome only — deliberately does no auth *gating* itself. The actual
@@ -26,15 +28,29 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const me = await getMyRolesOrNull();
 
   return (
-    <div className="min-h-screen bg-stone-50">
-      <div className="flex items-center gap-3 border-b border-stone-200 bg-white px-6 py-3">
-        {/* eslint-disable-next-line @next/next/no-img-element -- static
-            brand SVG, no benefit from next/image's raster optimization */}
-        <img src="/brand/tcm-logo-purple.svg" alt="TCM Foundation" className="h-6 w-auto" />
-        <span className="text-sm font-medium text-stone-700">Admin</span>
-      </div>
-      {me && <AdminNav roles={me.roles} />}
-      {children}
+    <div className="h-screen overflow-hidden bg-stone-50">
+      <Toaster />
+      {me ? (
+        <div className="flex h-full">
+          <AdminSidebar roles={me.roles} />
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <AdminHeader user={me} />
+            <main className="min-h-0 flex-1 overflow-y-auto">
+              <div className="mx-auto max-w-7xl px-6 py-8 lg:px-8">{children}</div>
+            </main>
+          </div>
+        </div>
+      ) : (
+        <div className="flex h-full flex-col">
+          <div className="flex shrink-0 items-center gap-3 border-b border-stone-200 bg-white px-6 py-3">
+            {/* eslint-disable-next-line @next/next/no-img-element -- static
+                brand SVG, no benefit from next/image's raster optimization */}
+            <img src="/brand/tcm-logo-purple.svg" alt="TCM Foundation" className="h-6 w-auto" />
+            <span className="text-sm font-medium text-stone-700">Admin</span>
+          </div>
+          <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
+        </div>
+      )}
     </div>
   );
 }

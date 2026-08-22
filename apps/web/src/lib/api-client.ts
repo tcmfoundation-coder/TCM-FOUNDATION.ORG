@@ -12,6 +12,21 @@ export class ApiError extends Error {
 
 type RequestOptions = Omit<RequestInit, "body"> & { body?: unknown; revalidateSeconds?: number };
 
+// NestJS's default HttpException filter returns { statusCode, message, error },
+// where `message` is a single string or (from ValidationPipe) an array of
+// per-field validation messages. Surface that real message instead of a
+// generic "failed with 400" so forms can show the actual problem.
+async function extractErrorMessage(response: Response, path: string): Promise<string> {
+  try {
+    const body = (await response.json()) as { message?: string | string[] };
+    if (Array.isArray(body.message)) return body.message.join(" ");
+    if (typeof body.message === "string") return body.message;
+  } catch {
+    // Response body wasn't JSON (or was empty) — fall through.
+  }
+  return `Request to ${path} failed with ${response.status}`;
+}
+
 // Thin fetch wrapper so every call goes through one place for the base URL,
 // credentials, and error shape — real endpoints get added domain-by-domain
 // as apps/api implements them (Phase 4).
@@ -26,19 +41,25 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   const { body, headers, revalidateSeconds, ...rest } = options;
   const method = (rest.method ?? "GET").toString().toUpperCase();
 
+  // FormData (media upload) must be sent as-is so the browser can set its
+  // own multipart boundary — JSON.stringify-ing a FormData instance silently
+  // produces "{}" and a Content-Type: application/json header would make
+  // the backend's multer interceptor never see the file or fields.
+  const isFormData = body instanceof FormData;
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...rest,
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...headers,
     },
     credentials: "include",
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
     ...(method === "GET" ? { next: { revalidate: revalidateSeconds ?? 60 } } : { cache: "no-store" }),
   });
 
   if (!response.ok) {
-    throw new ApiError(`Request to ${path} failed with ${response.status}`, response.status);
+    throw new ApiError(await extractErrorMessage(response, path), response.status);
   }
 
   if (response.status === 204) {

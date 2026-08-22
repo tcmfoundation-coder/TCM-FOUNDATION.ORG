@@ -12,8 +12,6 @@ import { GoogleOAuthGuard } from './guards/google-oauth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { MfaPendingGuard } from './guards/mfa-pending.guard';
-import { MAIL_SERVICE } from './mail/mail.service';
-import { ConsoleMailAdapter } from './mail/console-mail.adapter';
 
 @Module({
   imports: [
@@ -30,7 +28,6 @@ import { ConsoleMailAdapter } from './mail/console-mail.adapter';
     JwtAuthGuard,
     RolesGuard,
     MfaPendingGuard,
-    { provide: MAIL_SERVICE, useClass: ConsoleMailAdapter },
     {
       // Only constructed when Google credentials are actually configured —
       // passport-google-oauth20's Strategy constructor throws on empty

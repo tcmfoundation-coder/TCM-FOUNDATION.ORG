@@ -1,11 +1,5 @@
-import { PlaceholderPage } from "@/components/placeholder-page";
+import { TeamList } from "@/components/admin/team-list";
 
 export default function AdminTeamPage() {
-  return (
-    <PlaceholderPage
-      title="Manage Team"
-      description="Manage team member profiles."
-      phase="Phase 4"
-    />
-  );
+  return <TeamList />;
 }

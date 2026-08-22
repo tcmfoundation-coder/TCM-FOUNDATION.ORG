@@ -6,7 +6,8 @@ import { EmptyState } from "../ui/empty-state";
 import { buttonStyles } from "../ui/button";
 
 export async function ResourcesPreview() {
-  const posts = await listBlogPosts(3);
+  const response = await listBlogPosts({ take: 3 });
+  const posts = Array.isArray(response) ? response : response?.items || [];
 
   return (
     <section className="mx-auto max-w-6xl px-6 py-16 md:py-24">
@@ -31,6 +32,7 @@ export async function ResourcesPreview() {
                 title={post.title}
                 excerpt={post.excerpt}
                 date={post.publishedAt}
+                image={post.coverImage}
               />
             ))}
           </div>

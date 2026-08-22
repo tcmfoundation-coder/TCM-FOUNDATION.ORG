@@ -68,11 +68,40 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --font-display: var(--font-fraunces);
+  --font-arabic: var(--font-arabic);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
+}
+
+/* Continuous horizontal scroll for the Partners & Supporters strip — the
+   track holds two identical copies of the logo list back-to-back
+   (partners.tsx), and translating exactly -50% loops seamlessly since the
+   second copy is pixel-identical to the first. */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* Entrance for the TCM Hub advert (tcm-hub-popup-dialog.tsx) — a short
+   rise-and-settle so the popup reads as arriving rather than appearing
+   abruptly over content the visitor is already reading. Applied via
+   `motion-safe:` and additionally covered by the reduced-motion rule below. */
+@keyframes popup-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 0.75rem));
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
 }
 
 /* Respected by every animated component (StatCounter, reveals, hovers) —

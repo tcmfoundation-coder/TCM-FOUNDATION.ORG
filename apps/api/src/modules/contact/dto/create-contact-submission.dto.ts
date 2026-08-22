@@ -26,4 +26,10 @@ export class CreateContactSubmissionDto {
   @IsString()
   @MinLength(1)
   message!: string;
+
+  // Declared so `forbidNonWhitelisted` accepts the field; TurnstileGuard has
+  // already verified it server-side before this DTO is ever constructed.
+  @IsOptional()
+  @IsString()
+  turnstileToken?: string;
 }

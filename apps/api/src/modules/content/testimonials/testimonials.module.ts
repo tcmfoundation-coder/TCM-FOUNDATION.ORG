@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 import { TestimonialsController } from './testimonials.controller';
 import { TestimonialsService } from './testimonials.service';
+import { AuthModule } from '../../identity/auth/auth.module';
 
 @Module({
+  imports: [AuthModule],
   controllers: [TestimonialsController],
   providers: [TestimonialsService],
 })

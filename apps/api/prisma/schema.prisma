@@ -123,6 +123,7 @@ enum AuditAction {
   MFA_VERIFICATION_SUCCEEDED
   MFA_VERIFICATION_FAILED
   AUTHORIZATION_DENIED
+  PASSWORD_CHANGED
   CONTENT_CREATED
   CONTENT_UPDATED
   CONTENT_DELETED
@@ -147,6 +148,7 @@ model AuditLog {
 
   @@index([entityType, entityId])
   @@index([actorId])
+  @@index([createdAt])
 }
 
 // ---------------------------------------------------------------------
@@ -181,6 +183,8 @@ model Media {
   articlesAsCover    Article[]    @relation("ArticleCover")
   spotlightsAsCover  Spotlight[]  @relation("SpotlightCover")
   downloadsAsFile    Download[]   @relation("DownloadFile")
+
+  @@index([type, createdAt])
 }
 
 // ---------------------------------------------------------------------
@@ -216,6 +220,8 @@ model Program {
   isPublished  Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@index([isPublished, createdAt])
 }
 
 enum TeamMemberKind {
@@ -373,6 +379,8 @@ model BlogPost {
   publishedAt    DateTime?
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
+
+  @@index([isPublished, publishedAt])
 }
 
 model Article {
@@ -393,6 +401,8 @@ model Article {
   publishedAt    DateTime?
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
+
+  @@index([isPublished, publishedAt])
 }
 
 model Spotlight {
@@ -411,6 +421,8 @@ model Spotlight {
   publishedAt    DateTime?
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
+
+  @@index([isPublished, publishedAt])
 }
 
 model Download {
@@ -423,6 +435,8 @@ model Download {
   isPublished Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([isPublished, createdAt])
 }
 
 enum OpportunityType {
@@ -445,6 +459,8 @@ model Opportunity {
   isPublished      Boolean         @default(true)
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
+
+  @@index([isPublished, type, deadline])
 }
 
 // ---------------------------------------------------------------------
@@ -471,6 +487,8 @@ model CallForApplication {
 
   fields      ApplicationField[]
   submissions ApplicationSubmission[]
+
+  @@index([status, openDate])
 }
 
 enum ApplicationFieldType {
@@ -515,6 +533,7 @@ model ApplicationSubmission {
   submittedAt          DateTime                          @default(now())
 
   @@index([callForApplicationId])
+  @@index([callForApplicationId, submittedAt])
 }
 
 // ---------------------------------------------------------------------
@@ -564,10 +583,18 @@ enum NewsletterSubscriberStatus {
 }
 
 model NewsletterSubscriber {
-  id             String                     @id @default(cuid())
-  email          String                     @unique
-  status         NewsletterSubscriberStatus @default(SUBSCRIBED)
-  subscribedAt   DateTime                   @default(now())
+  id     String                     @id @default(cuid())
+  email  String                     @unique
+  status NewsletterSubscriberStatus @default(SUBSCRIBED)
+
+  // Opaque, single-purpose token that identifies the subscriber in an
+  // unsubscribe link, so the address itself never travels in a URL (which
+  // would leak it into server logs and Referer headers). Nullable only
+  // because rows created before this column existed have none; every new or
+  // re-confirmed subscription gets one.
+  unsubscribeToken String? @unique
+
+  subscribedAt   DateTime  @default(now())
   unsubscribedAt DateTime?
 }
 

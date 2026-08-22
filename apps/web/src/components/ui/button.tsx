@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes } from "react";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "outline-inverse";
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "outline-inverse" | "solid-inverse";
 export type ButtonSize = "default" | "sm";
 
 const base =
@@ -15,6 +15,10 @@ const variants: Record<ButtonVariant, string> = {
   // since same-specificity Tailwind utilities don't reliably override by
   // class order.
   "outline-inverse": "border border-white text-white hover:bg-white/10 focus-visible:outline-white",
+  // The highest-contrast option on a dark/brand background — for the one
+  // CTA that should read as primary among several outline-inverse siblings
+  // (e.g. "Donate" among the Get Involved band's actions).
+  "solid-inverse": "bg-white text-brand-700 hover:bg-brand-50 focus-visible:outline-white",
 };
 
 const sizes: Record<ButtonSize, string> = {

@@ -4,11 +4,17 @@ import { getProgramBySlug } from "@/lib/api/programs";
 import { fetchOrNotFound } from "@/lib/api/fetch-or-not-found";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { buttonStyles } from "@/components/ui/button";
+import { buildMetadata } from "@/lib/seo";
 
 export async function generateMetadata({ params }: PageProps<"/programs/[slug]">): Promise<Metadata> {
   const { slug } = await params;
   const program = await fetchOrNotFound(() => getProgramBySlug(slug));
-  return { title: program.title, description: program.description };
+  return buildMetadata({
+    title: program.title,
+    description: program.description,
+    path: `/programs/${slug}`,
+    image: program.heroImage ? { url: program.heroImage.secureUrl, alt: program.heroImage.altText } : undefined,
+  });
 }
 
 export default async function ProgramDetailPage({ params }: PageProps<"/programs/[slug]">) {

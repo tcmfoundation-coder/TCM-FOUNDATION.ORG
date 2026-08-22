@@ -61,9 +61,21 @@ class EnvironmentVariables {
   @IsString()
   CLOUDINARY_API_SECRET?: string;
 
+  // Transactional email. Optional here because local development runs without
+  // a provider; the real requirement is conditional (resend needs both
+  // RESEND_API_KEY and EMAIL_FROM) and is enforced at boot by
+  // createMailService, which can see how the three relate to each other.
+  @IsOptional()
+  @IsIn(['resend', 'console'])
+  EMAIL_PROVIDER?: string;
+
   @IsOptional()
   @IsString()
-  EMAIL_PROVIDER_API_KEY?: string;
+  RESEND_API_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  EMAIL_FROM?: string;
 
   @IsOptional()
   @IsString()
@@ -76,6 +88,12 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   TURNSTILE_SECRET_KEY?: string;
+
+  // Number of reverse proxies in front of this instance. See main.ts for why
+  // this is opt-in rather than defaulted on.
+  @IsOptional()
+  @IsNumberString()
+  TRUST_PROXY_HOPS?: string;
 
   @IsOptional()
   @IsString()

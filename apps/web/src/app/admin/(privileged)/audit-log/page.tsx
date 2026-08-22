@@ -1,11 +1,5 @@
-import { PlaceholderPage } from "@/components/placeholder-page";
+import { AuditLogList } from "@/components/admin/audit-log-list";
 
 export default function AdminAuditLogPage() {
-  return (
-    <PlaceholderPage
-      title="Audit Log"
-      description="Read-only record of privileged actions."
-      phase="Phase 2"
-    />
-  );
+  return <AuditLogList />;
 }

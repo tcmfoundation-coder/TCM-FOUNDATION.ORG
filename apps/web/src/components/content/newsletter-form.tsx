@@ -7,6 +7,7 @@ import { z } from "zod";
 import { Loader2 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Alert } from "../ui/alert";
+import { TurnstileWidget } from "../ui/turnstile-widget";
 import { subscribeToNewsletter } from "@/lib/api/newsletter";
 import { trackEvent } from "@/lib/analytics";
 
@@ -19,6 +20,7 @@ type Status = "idle" | "loading" | "success" | "already-subscribed" | "server-er
 
 export function NewsletterForm() {
   const [status, setStatus] = useState<Status>("idle");
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
@@ -28,7 +30,7 @@ export function NewsletterForm() {
   async function onSubmit(values: FormValues) {
     setStatus("loading");
     try {
-      const result = await subscribeToNewsletter(values.email);
+      const result = await subscribeToNewsletter(values.email, turnstileToken);
       if (!result.alreadySubscribed) trackEvent("newsletter_subscribed");
       setStatus(result.alreadySubscribed ? "already-subscribed" : "success");
     } catch {
@@ -56,7 +58,10 @@ export function NewsletterForm() {
           placeholder="Enter your email address"
           aria-invalid={errors.email ? true : undefined}
           aria-describedby={errors.email ? "newsletter-email-error" : undefined}
-          className="w-full rounded-sm border border-white/20 bg-white/10 px-4 py-2.5 text-sm text-white placeholder:text-white/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-white"
+          // border-white/20 measured 1.86:1 against this section's background;
+          // WCAG 1.4.11 wants >=3:1 for a control's boundary. /40 clears it
+          // without turning the field into a hard-edged box.
+          className="w-full rounded-sm border border-white/40 bg-white/10 px-4 py-2.5 text-sm text-white placeholder:text-white/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-white"
           {...register("email")}
         />
         {errors.email && (
@@ -69,8 +74,13 @@ export function NewsletterForm() {
             We couldn&apos;t subscribe you right now. Please try again.
           </p>
         )}
+        <TurnstileWidget onToken={setTurnstileToken} />
       </div>
-      <Button type="submit" disabled={status === "loading"} className="shrink-0">
+      {/* solid-inverse, not the default primary: brand-600 on brand-950
+          measured 2.67:1 surface contrast, under the 3:1 WCAG 1.4.11 floor for
+          a UI component. This variant already exists for dark-background CTAs
+          (see button.tsx) - no new styling introduced. */}
+      <Button type="submit" variant="solid-inverse" disabled={status === "loading"} className="shrink-0">
         {status === "loading" && <Loader2 aria-hidden="true" className="size-4 animate-spin" />}
         Subscribe
       </Button>

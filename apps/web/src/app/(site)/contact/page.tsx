@@ -1,14 +1,15 @@
 import type { Metadata } from "next";
 import { ContactForm } from "@/components/content/contact-form";
-import { FaqAccordion } from "@/components/content/faq-accordion";
+import { FaqExplorer } from "@/components/content/faq-explorer";
 import { listFaq } from "@/lib/api/faq";
 import { getSiteSettings } from "@/lib/api/site-settings";
+import { buildMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Contact & Support",
-  description:
-    "Get in touch with TCM Foundation for general inquiries, or browse frequently asked questions.",
-};
+  description: "Get in touch with TCM Foundation for general inquiries, or browse frequently asked questions.",
+  path: "/contact",
+});
 
 export default async function ContactPage() {
   const [faq, settings] = await Promise.all([listFaq(), getSiteSettings()]);
@@ -60,7 +61,7 @@ export default async function ContactPage() {
 
         <div className="flex flex-col gap-6">
           <h2 className="font-display text-2xl font-medium text-stone-900">Frequently Asked Questions</h2>
-          <FaqAccordion items={faq} />
+          <FaqExplorer initialItems={faq} />
         </div>
       </div>
     </main>

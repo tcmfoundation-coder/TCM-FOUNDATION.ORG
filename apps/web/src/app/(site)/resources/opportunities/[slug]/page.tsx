@@ -5,11 +5,16 @@ import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink } from "@/components/ui/external-link";
 import { buttonStyles } from "@/components/ui/button";
+import { buildMetadata } from "@/lib/seo";
 
 export async function generateMetadata({ params }: PageProps<"/resources/opportunities/[slug]">): Promise<Metadata> {
   const { slug } = await params;
   const opportunity = await fetchOrNotFound(() => getOpportunityBySlug(slug));
-  return { title: opportunity.title, description: opportunity.description };
+  return buildMetadata({
+    title: opportunity.title,
+    description: opportunity.description,
+    path: `/resources/opportunities/${slug}`,
+  });
 }
 
 export default async function OpportunityPage({ params }: PageProps<"/resources/opportunities/[slug]">) {

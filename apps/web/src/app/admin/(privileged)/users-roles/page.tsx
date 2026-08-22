@@ -33,10 +33,11 @@ export default async function AdminUsersRolesPage() {
   }
 
   const data = (await usersRes.json()) as StaffList;
+  const users = Array.isArray(data) ? data : data?.items || [];
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-12">
-      <UsersRolesContent initialUsers={data.items} canManage={isSuperAdmin} currentUserId={me.id} />
+      <UsersRolesContent initialUsers={users} canManage={isSuperAdmin} currentUserId={me.id} />
     </main>
   );
 }

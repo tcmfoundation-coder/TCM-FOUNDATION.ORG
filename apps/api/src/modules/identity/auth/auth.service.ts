@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Inject,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -11,7 +12,12 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditLogService } from '../../audit/audit-log.service';
 import { TokenService } from './token.service';
 import { MfaService } from './mfa.service';
-import { MAIL_SERVICE, type MailService } from './mail/mail.service';
+import { MAIL_SERVICE, type MailService } from '../../mail/mail.service';
+import {
+  emailVerificationEmail,
+  passwordResetEmail,
+} from '../../mail/templates/auth-emails';
+import { MailDeliveryError } from '../../mail/resend-mail.adapter';
 import { generateRandomToken, hashToken } from './crypto.util';
 import {
   setAuthCookies,
@@ -29,6 +35,8 @@ import type { GoogleProfile } from './strategies/google.strategy';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tokens: TokenService,
@@ -243,11 +251,10 @@ export class AuthService {
     });
 
     const verifyUrl = `${this.config.get<string>('APP_BASE_URL') ?? 'http://localhost:3000'}/admin/verify-email?token=${rawToken}`;
-    await this.mail.send({
-      to: email,
-      subject: 'Verify your TCM Foundation account email',
-      text: `Verify your email: ${verifyUrl}\nThis link expires in 24 hours.`,
-    });
+    // Deliberately not caught: this runs inside an authenticated admin action
+    // (creating a staff user), where there is no enumeration concern and the
+    // admin needs to know the verification email did not go out.
+    await this.mail.send(emailVerificationEmail(email, verifyUrl));
   }
 
   async verifyEmail(rawToken: string): Promise<void> {
@@ -287,11 +294,22 @@ export class AuthService {
     });
 
     const resetUrl = `${this.config.get<string>('APP_BASE_URL') ?? 'http://localhost:3000'}/admin/reset-password?token=${rawToken}`;
-    await this.mail.send({
-      to: email,
-      subject: 'Reset your TCM Foundation password',
-      text: `Reset your password: ${resetUrl}\nThis link expires in 1 hour. If you didn't request this, ignore this email.`,
-    });
+    try {
+      await this.mail.send(passwordResetEmail(email, resetUrl));
+    } catch (error) {
+      // This endpoint answers identically whether or not the account exists
+      // (see the early return above), so a delivery failure must not become
+      // an account-enumeration oracle by turning into a 500 for real accounts
+      // only. The failure is surfaced to operators through the log instead of
+      // to the caller — never swallowed silently.
+      // Category only — never the recipient, the token, or the reset URL,
+      // since this log line records that *some* account requested a reset.
+      const category =
+        error instanceof MailDeliveryError ? error.category : 'unknown';
+      this.logger.error(
+        `EMAIL_SEND_FAILURE type=password_reset category=${category} — the reset link was not delivered. The endpoint still returned its uniform response to avoid revealing whether the account exists.`,
+      );
+    }
   }
 
   async resetPassword(rawToken: string, newPassword: string): Promise<void> {
@@ -321,5 +339,52 @@ export class AuthService {
     // device the reset happened on — the old password may have been
     // compromised, which is the whole reason a reset was requested.
     await this.tokens.revokeAllForUser(user.id);
+  }
+
+  /**
+   * Self-service password change for an already-authenticated user. Proof
+   * of the current password stands in for re-authentication. Follows the
+   * same session-invalidation policy as resetPassword — a credential
+   * change revokes every refresh token, and the caller also clears this
+   * request's own cookies so the change takes effect immediately rather
+   * than leaving the current access token usable until its natural expiry.
+   */
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+    res: Response,
+    ipAddress?: string,
+  ): Promise<void> {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+    });
+
+    if (!user.passwordHash) {
+      throw new BadRequestException(
+        'This account has no password set (Google sign-in only). Contact a Super Administrator.',
+      );
+    }
+
+    if (!(await argon2.verify(user.passwordHash, currentPassword))) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    const passwordHash = await argon2.hash(newPassword);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
+
+    await this.tokens.revokeAllForUser(userId);
+    clearAuthCookies(res);
+
+    await this.audit.record({
+      action: 'PASSWORD_CHANGED',
+      entityType: 'User',
+      entityId: userId,
+      actorId: userId,
+      ipAddress,
+    });
   }
 }

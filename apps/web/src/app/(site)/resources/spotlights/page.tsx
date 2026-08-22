@@ -4,14 +4,17 @@ import { listSpotlights } from "@/lib/api/spotlights";
 import { ResourceCard } from "@/components/content/resource-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
+import { buildMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Spotlights",
   description: "Features on inspiring Muslim women breaking barriers, from TCM Foundation.",
-};
+  path: "/resources/spotlights",
+});
 
 export default async function SpotlightsIndexPage() {
-  const spotlights = await listSpotlights();
+  const response = await listSpotlights();
+  const spotlights = Array.isArray(response) ? response : response?.items || [];
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-16 md:py-24">
@@ -31,6 +34,7 @@ export default async function SpotlightsIndexPage() {
               title={spotlight.title}
               excerpt={spotlight.subjectName}
               date={spotlight.publishedAt}
+              image={spotlight.coverImage}
             />
           ))}
         </div>

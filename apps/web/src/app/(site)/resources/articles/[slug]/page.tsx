@@ -2,11 +2,18 @@ import type { Metadata } from "next";
 import { getArticleBySlug } from "@/lib/api/articles";
 import { fetchOrNotFound } from "@/lib/api/fetch-or-not-found";
 import { ResourceDetail } from "@/components/content/resource-detail";
+import { buildMetadata } from "@/lib/seo";
 
 export async function generateMetadata({ params }: PageProps<"/resources/articles/[slug]">): Promise<Metadata> {
   const { slug } = await params;
   const article = await fetchOrNotFound(() => getArticleBySlug(slug));
-  return { title: article.title, description: article.excerpt ?? undefined };
+  return buildMetadata({
+    title: article.title,
+    description: article.excerpt ?? `Read ${article.title} on TCM Foundation.`,
+    path: `/resources/articles/${slug}`,
+    image: article.coverImage ? { url: article.coverImage.secureUrl, alt: article.coverImage.altText } : undefined,
+    type: "article",
+  });
 }
 
 export default async function ArticlePage({ params }: PageProps<"/resources/articles/[slug]">) {
