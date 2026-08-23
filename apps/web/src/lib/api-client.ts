@@ -1,4 +1,18 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+// Two different bases on purpose.
+//
+// In the BROWSER, calls go to a same-origin path that next.config.ts rewrites
+// to the API. That is what makes the session cookies first-party — see the
+// comment there for why cross-origin calls silently lose them on Railway.
+//
+// On the SERVER, the API is called directly: a server component routing back
+// through its own origin would be a pointless extra hop, and there is no
+// cookie policy involved in a server-to-server request.
+const SERVER_API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+const BROWSER_API_BASE_URL = "/api-proxy";
+
+const API_BASE_URL =
+  typeof window === "undefined" ? SERVER_API_BASE_URL : BROWSER_API_BASE_URL;
 
 export class ApiError extends Error {
   constructor(
