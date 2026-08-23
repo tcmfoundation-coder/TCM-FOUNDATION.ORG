@@ -51,6 +51,50 @@ async function extractErrorMessage(response: Response, path: string): Promise<st
 // build time and (b) mean CMS edits never show up without a full rebuild.
 // GET requests default to a short revalidate window instead (time-based
 // ISR); pass `revalidateSeconds` to override per call.
+
+/**
+ * Renews an expired access token using the refresh cookie, then lets the
+ * caller retry. Browser only: a Server Component cannot set cookies on the
+ * response, so a server-side refresh would obtain new tokens and have nowhere
+ * to put them.
+ *
+ * STRICTLY single-flight, and that is a correctness requirement rather than an
+ * optimisation. `TokenService.rotateRefreshToken` implements refresh-token
+ * reuse detection: presenting an already-rotated token calls
+ * `revokeAllForUser` and kills every session that account has. Two concurrent
+ * 401s each firing their own refresh would present the same cookie twice and
+ * log the user out of everything. Sharing one in-flight promise makes that
+ * impossible.
+ */
+let refreshInFlight: Promise<boolean> | null = null;
+
+function refreshSession(): Promise<boolean> {
+  refreshInFlight ??= (async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+      });
+      return res.ok;
+    } catch {
+      return false;
+    } finally {
+      // Cleared on the microtask after every waiter has observed the result,
+      // so a later 401 can start a genuinely new refresh.
+      queueMicrotask(() => {
+        refreshInFlight = null;
+      });
+    }
+  })();
+  return refreshInFlight;
+}
+
+// Endpoints that must never trigger a refresh-and-retry: refresh itself would
+// recurse, and a 401 from these is the real answer rather than an expired
+// token.
+const NO_RETRY_PATHS = ["/auth/refresh", "/auth/login", "/auth/logout"];
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, headers, revalidateSeconds, ...rest } = options;
   const method = (rest.method ?? "GET").toString().toUpperCase();
@@ -61,16 +105,37 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   // the backend's multer interceptor never see the file or fields.
   const isFormData = body instanceof FormData;
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...rest,
-    headers: {
-      ...(isFormData ? {} : { "Content-Type": "application/json" }),
-      ...headers,
-    },
-    credentials: "include",
-    body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
-    ...(method === "GET" ? { next: { revalidate: revalidateSeconds ?? 60 } } : { cache: "no-store" }),
-  });
+  const send = () =>
+    fetch(`${API_BASE_URL}${path}`, {
+      ...rest,
+      headers: {
+        ...(isFormData ? {} : { "Content-Type": "application/json" }),
+        ...headers,
+      },
+      credentials: "include",
+      body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
+      ...(method === "GET" ? { next: { revalidate: revalidateSeconds ?? 60 } } : { cache: "no-store" }),
+    });
+
+  let response = await send();
+
+  // The access token lives 15 minutes while the refresh token lives 30 days.
+  // Until now nothing ever spent that refresh token, so the session simply
+  // ended after 15 minutes. One retry only - if the refresh fails, the 401 is
+  // genuine and the caller should see it.
+  //
+  // A FormData body cannot be replayed once consumed, so uploads are not
+  // retried; they surface the 401 and the next action refreshes.
+  if (
+    response.status === 401 &&
+    typeof window !== "undefined" &&
+    !isFormData &&
+    !NO_RETRY_PATHS.some((p) => path.startsWith(p))
+  ) {
+    if (await refreshSession()) {
+      response = await send();
+    }
+  }
 
   if (!response.ok) {
     throw new ApiError(await extractErrorMessage(response, path), response.status);
