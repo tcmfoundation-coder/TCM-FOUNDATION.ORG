@@ -16,6 +16,17 @@ import { PrismaService } from '../src/prisma/prisma.service';
  * three independent enforcement points rather than trusting one: a live access
  * token stops working, the refresh token cannot be traded for a new session,
  * and login is refused.
+ *
+ * Every test gets its OWN Nest application (see beforeEach/afterEach) rather
+ * than one shared instance for the whole file. /auth/login now carries a
+ * strict per-IP throttle (see auth-throttle.e2e-spec.ts) — this file's ~20
+ * test cases collectively call the `login()` helper far more times than that
+ * limit allows, and every request here resolves to the same loopback IP
+ * within one app instance. A fresh app per test gives each one an empty
+ * throttle bucket, matching how a real deployment's IP-based limit only ever
+ * applies within a single flow, not across unrelated ones. `prisma` is a
+ * separate, non-throttled connection so setup/assertions/cleanup aren't tied
+ * to the HTTP app's lifecycle at all.
  */
 describe('Staff user lifecycle (e2e)', () => {
   const runId = Date.now();
@@ -25,20 +36,8 @@ describe('Staff user lifecycle (e2e)', () => {
   let prisma: PrismaService;
 
   beforeAll(async () => {
-    const fixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-    app = fixture.createNestApplication();
-    app.use(cookieParser());
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-      }),
-    );
-    await app.init();
-    prisma = app.get(PrismaService);
+    prisma = new PrismaService();
+    await prisma.$connect();
   });
 
   afterAll(async () => {
@@ -55,6 +54,26 @@ describe('Staff user lifecycle (e2e)', () => {
     await prisma.userRole.deleteMany({ where: { userId: { in: ids } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: ids } } });
     await prisma.user.deleteMany({ where: { id: { in: ids } } });
+    await prisma.$disconnect();
+  });
+
+  beforeEach(async () => {
+    const fixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+    app = fixture.createNestApplication();
+    app.use(cookieParser());
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    );
+    await app.init();
+  });
+
+  afterEach(async () => {
     await app.close();
   });
 
@@ -86,8 +105,7 @@ describe('Staff user lifecycle (e2e)', () => {
       .send({ email, password })
       .expect(200);
     const cookies = response.headers['set-cookie'] as unknown as
-      | string[]
-      | undefined;
+      string[] | undefined;
     if (!cookies) throw new Error('Expected session cookies');
     return cookies.map((cookie) => cookie.split(';')[0]).join('; ');
   }
