@@ -151,10 +151,10 @@ export default function PrivacyPage() {
       <LegalSection number="1.10" heading="Contact">
         <p>TCM Foundation</p>
         <p>
-          Email: <Placeholder>[Insert Official Email]</Placeholder>
+          Email: <Placeholder>contact@tcmfoundation.org</Placeholder>
         </p>
         <p>
-          Address: <Placeholder>[Insert Official Address]</Placeholder>
+          Address: <Placeholder>lagos, nigeria</Placeholder>
         </p>
       </LegalSection>
     </LegalPage>

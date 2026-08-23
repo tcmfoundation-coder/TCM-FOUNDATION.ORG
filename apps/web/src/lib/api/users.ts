@@ -9,6 +9,7 @@ export interface StaffUser {
   emailVerifiedAt: string | null;
   mfaEnabled: boolean;
   createdAt: string;
+  deactivatedAt: string | null;
   roles: MyRoles["roles"];
 }
 
@@ -27,6 +28,14 @@ export function createStaffUser(input: {
   email: string;
   temporaryPassword: string;
   initialRole?: PrivilegedRole;
-}): Promise<StaffUser> {
-  return apiClient.post<StaffUser>("/users", input);
+}): Promise<StaffUser & { emailDelivered: boolean }> {
+  return apiClient.post<StaffUser & { emailDelivered: boolean }>("/users", input);
+}
+
+export function deactivateStaffUser(userId: string): Promise<StaffUser> {
+  return apiClient.delete<StaffUser>(`/users/${userId}`);
+}
+
+export function reactivateStaffUser(userId: string): Promise<StaffUser> {
+  return apiClient.post<StaffUser>(`/users/${userId}/reactivate`);
 }

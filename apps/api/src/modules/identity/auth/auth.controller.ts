@@ -1,3 +1,4 @@
+import { Throttle } from '@nestjs/throttler';
 import {
   Body,
   Controller,
@@ -20,12 +21,17 @@ import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { MfaPendingGuard } from './guards/mfa-pending.guard';
 import { GoogleOAuthGuard } from './guards/google-oauth.guard';
+import { GoogleOAuthCallbackGuard } from './guards/google-oauth-callback.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GoogleUser } from './decorators/google-user.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
 import type { GoogleProfile } from './strategies/google.strategy';
 import type { AuthenticatedUser } from './guards/jwt-auth.guard';
 import { COOKIE_NAMES } from './auth.constants';
+import {
+  AUTH_ATTEMPT_THROTTLE,
+  PASSWORD_RESET_THROTTLE,
+} from '../../security/throttle.constants';
 
 @Controller('auth')
 export class AuthController {
@@ -49,6 +55,7 @@ export class AuthController {
   }
 
   @Post('login')
+  @Throttle(AUTH_ATTEMPT_THROTTLE)
   @HttpCode(200)
   login(
     @Body() dto: LoginDto,
@@ -59,6 +66,7 @@ export class AuthController {
   }
 
   @Post('mfa/login-verify')
+  @Throttle(AUTH_ATTEMPT_THROTTLE)
   @HttpCode(200)
   @UseGuards(MfaPendingGuard)
   async mfaLoginVerify(
@@ -105,6 +113,7 @@ export class AuthController {
   }
 
   @Post('request-password-reset')
+  @Throttle(PASSWORD_RESET_THROTTLE)
   @HttpCode(200)
   async requestPasswordReset(@Body() dto: RequestPasswordResetDto) {
     await this.auth.requestPasswordReset(dto.email);
@@ -114,6 +123,7 @@ export class AuthController {
   }
 
   @Post('reset-password')
+  @Throttle(AUTH_ATTEMPT_THROTTLE)
   @HttpCode(200)
   async resetPassword(@Body() dto: ResetPasswordDto) {
     await this.auth.resetPassword(dto.token, dto.newPassword);
@@ -148,7 +158,7 @@ export class AuthController {
   }
 
   @Get('google/callback')
-  @UseGuards(GoogleOAuthGuard)
+  @UseGuards(GoogleOAuthCallbackGuard)
   async googleCallback(
     @GoogleUser() profile: GoogleProfile,
     @Req() req: Request,

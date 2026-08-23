@@ -44,14 +44,27 @@ export class JwtAuthGuard implements CanActivate {
     const payload = this.tokens.verifyAccessToken(token);
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, email: true, mfaEnabled: true },
+      select: {
+        id: true,
+        email: true,
+        mfaEnabled: true,
+        deactivatedAt: true,
+      },
     });
 
-    if (!user) {
+    // Deactivation is checked here, not only at login, so an access token
+    // already issued stops working on the very next request rather than
+    // lasting out its remaining 15 minutes. Same reasoning as the fresh role
+    // lookup in RolesGuard: current state decides, never the token.
+    if (!user || user.deactivatedAt) {
       throw new UnauthorizedException('Not authenticated');
     }
 
-    request.user = user;
+    request.user = {
+      id: user.id,
+      email: user.email,
+      mfaEnabled: user.mfaEnabled,
+    };
     return true;
   }
 }

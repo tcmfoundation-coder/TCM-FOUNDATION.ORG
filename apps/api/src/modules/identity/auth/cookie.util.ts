@@ -46,3 +46,15 @@ export function clearAuthCookies(res: Response) {
   res.clearCookie(COOKIE_NAMES.REFRESH, { path: '/' });
   res.clearCookie(COOKIE_NAMES.MFA_PENDING, { path: '/' });
 }
+
+export function setOAuthStateCookie(
+  res: Response,
+  state: string,
+  ttlSeconds: number,
+) {
+  res.cookie(COOKIE_NAMES.OAUTH_STATE, state, baseCookieOptions(ttlSeconds));
+}
+
+export function clearOAuthStateCookie(res: Response) {
+  res.clearCookie(COOKIE_NAMES.OAUTH_STATE, { path: '/' });
+}

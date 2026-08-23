@@ -64,7 +64,7 @@ export default function AccessibilityPage() {
         />
         <p>We will make reasonable efforts to assist you and improve the accessibility of the affected content.</p>
         <p>
-          Contact — Email: <Placeholder>[Insert Official Email]</Placeholder>
+          Contact — Email: <Placeholder>contact@tcmfoundation.org</Placeholder>
         </p>
       </LegalSection>
     </LegalPage>

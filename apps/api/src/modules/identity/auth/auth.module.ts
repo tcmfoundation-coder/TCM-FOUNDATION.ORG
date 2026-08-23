@@ -9,6 +9,7 @@ import { TokenService } from './token.service';
 import { MfaService } from './mfa.service';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { GoogleOAuthGuard } from './guards/google-oauth.guard';
+import { GoogleOAuthCallbackGuard } from './guards/google-oauth-callback.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { MfaPendingGuard } from './guards/mfa-pending.guard';
@@ -25,6 +26,7 @@ import { MfaPendingGuard } from './guards/mfa-pending.guard';
     TokenService,
     MfaService,
     GoogleOAuthGuard,
+    GoogleOAuthCallbackGuard,
     JwtAuthGuard,
     RolesGuard,
     MfaPendingGuard,

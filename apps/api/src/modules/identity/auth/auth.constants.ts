@@ -4,6 +4,7 @@
 export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60; // 15 minutes
 export const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
 export const MFA_PENDING_TOKEN_TTL_SECONDS = 5 * 60; // 5 minutes
+export const OAUTH_STATE_TTL_SECONDS = 10 * 60; // 10 minutes — matches oauth-state.util.ts
 export const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 export const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 hour
 
@@ -21,4 +22,5 @@ export const COOKIE_NAMES = {
   ACCESS: 'access_token',
   REFRESH: 'refresh_token',
   MFA_PENDING: 'mfa_pending_token',
+  OAUTH_STATE: 'oauth_state',
 } as const;

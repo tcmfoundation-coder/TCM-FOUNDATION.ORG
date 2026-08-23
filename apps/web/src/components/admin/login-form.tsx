@@ -21,8 +21,6 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
-
 const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
   google_account_not_provisioned:
     "No TCM Foundation account is linked to this Google account. Ask a Super Administrator to create one first.",
@@ -115,7 +113,11 @@ export function LoginForm({ googleEnabled, googleError }: { googleEnabled: boole
             OR
             <div className="h-px flex-1 bg-stone-200" />
           </div>
-          <a href={`${API_BASE_URL}/auth/google`} className="w-full">
+          {/* Same-origin via next.config.ts's /api-proxy rewrite, not the API
+              origin directly — Google's callback must land on this same
+              origin for the session cookies to end up first-party. See
+              google.strategy.ts's callbackURL comment for the full reason. */}
+          <a href="/api-proxy/auth/google" className="w-full">
             <Button type="button" variant="secondary" className="w-full justify-center">
               <GoogleIcon className="size-4" />
               Continue with Google

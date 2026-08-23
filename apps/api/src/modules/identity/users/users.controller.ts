@@ -1,7 +1,9 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
   Post,
   Query,
@@ -25,6 +27,24 @@ export class UsersController {
   @Roles(PrivilegedRole.SUPER_ADMINISTRATOR)
   create(@CurrentUser() actor: AuthenticatedUser, @Body() dto: CreateUserDto) {
     return this.users.createStaffUser(actor.id, dto);
+  }
+
+  // DELETE is the verb an administrator expects, but the effect is a soft
+  // delete: the row is retained so the audit trail keeps resolving actors.
+  // 200 rather than 204 because the updated user is returned, letting the UI
+  // re-render the row instead of guessing at the new state.
+  @Delete(':id')
+  @HttpCode(200)
+  @Roles(PrivilegedRole.SUPER_ADMINISTRATOR)
+  deactivate(@CurrentUser() actor: AuthenticatedUser, @Param('id') id: string) {
+    return this.users.deactivate(actor.id, id);
+  }
+
+  @Post(':id/reactivate')
+  @HttpCode(200)
+  @Roles(PrivilegedRole.SUPER_ADMINISTRATOR)
+  reactivate(@CurrentUser() actor: AuthenticatedUser, @Param('id') id: string) {
+    return this.users.reactivate(actor.id, id);
   }
 
   @Get()

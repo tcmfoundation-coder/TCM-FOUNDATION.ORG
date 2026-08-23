@@ -121,17 +121,17 @@ export default function TermsPage() {
       <LegalSection number="3.10" heading="Governing Law">
         <p>These Terms &amp; Conditions shall be interpreted in accordance with the applicable laws of:</p>
         <p>
-          <Placeholder>[Insert Jurisdiction]</Placeholder>
+          <Placeholder>nigeria</Placeholder>
         </p>
       </LegalSection>
 
       <LegalSection number="3.11" heading="Contact">
         <p>TCM Foundation</p>
         <p>
-          Email: <Placeholder>[Insert Official Email]</Placeholder>
+          Email: <Placeholder>contact@tcmfoundation.org</Placeholder>
         </p>
         <p>
-          Address: <Placeholder>[Insert Official Address]</Placeholder>
+          Address: <Placeholder>lagos, nigeria</Placeholder>
         </p>
       </LegalSection>
     </LegalPage>

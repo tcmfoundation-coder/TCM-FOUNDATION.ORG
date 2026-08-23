@@ -70,8 +70,12 @@ export class AuthService {
 
     // Same generic error whether the account doesn't exist or the password
     // is wrong — never reveal which, that's a user-enumeration leak.
+    // A deactivated account is refused with the same generic message and the
+    // password is still verified above it, so this does not become an oracle
+    // for "this address exists but is disabled".
     if (
       !user ||
+      user.deactivatedAt ||
       !user.passwordHash ||
       !(await argon2.verify(user.passwordHash, password))
     ) {
@@ -165,6 +169,23 @@ export class AuthService {
       where: { googleId: profile.googleId },
     });
 
+    if (user?.deactivatedAt) {
+      await this.audit.record({
+        action: 'ADMIN_LOGIN_FAILED',
+        entityType: 'User',
+        entityId: user.id,
+        after: {
+          email: profile.email,
+          method: 'google',
+          reason: 'deactivated',
+        },
+        ipAddress,
+      });
+      throw new UnauthorizedException(
+        'No TCM Foundation account is linked to this Google account. Ask a Super Administrator to create one first.',
+      );
+    }
+
     if (!user) {
       user = await this.prisma.user.findUnique({
         where: { email: profile.email },
@@ -176,6 +197,13 @@ export class AuthService {
           after: { email: profile.email, method: 'google' },
           ipAddress,
         });
+        throw new UnauthorizedException(
+          'No TCM Foundation account is linked to this Google account. Ask a Super Administrator to create one first.',
+        );
+      }
+      if (user.deactivatedAt) {
+        // Never link a Google identity onto a retired account: that would turn
+        // deactivation into something a user could undo for themselves.
         throw new UnauthorizedException(
           'No TCM Foundation account is linked to this Google account. Ask a Super Administrator to create one first.',
         );

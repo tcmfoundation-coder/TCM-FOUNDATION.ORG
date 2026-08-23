@@ -20,7 +20,17 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     const options: StrategyOptions = {
       clientID: config.getOrThrow<string>('GOOGLE_OAUTH_CLIENT_ID'),
       clientSecret: config.getOrThrow<string>('GOOGLE_OAUTH_CLIENT_SECRET'),
-      callbackURL: `${config.get<string>('API_BASE_URL') ?? 'http://localhost:4000'}/auth/google/callback`,
+      // Must land on the WEB origin's /api-proxy rewrite, not the API origin
+      // directly — Google redirects the browser here, so whatever host this
+      // is, that's the host every Set-Cookie from the rest of the flow gets
+      // scoped to. Railway's api-*/web-*.up.railway.app hosts are different
+      // registrable domains (up.railway.app is on the Public Suffix List),
+      // so a direct API callback URL would set the session cookies
+      // cross-site — SameSite=Lax cookies are then dropped by the browser
+      // and the user lands on the dashboard signed out. Routing through
+      // next.config.ts's /api-proxy rewrite keeps every cookie first-party
+      // to the web origin, the same fix already used for password login.
+      callbackURL: `${config.get<string>('APP_BASE_URL') ?? 'http://localhost:3000'}/api-proxy/auth/google/callback`,
       scope: ['email', 'profile'],
     };
     super(options);

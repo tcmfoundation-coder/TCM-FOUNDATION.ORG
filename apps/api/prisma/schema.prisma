@@ -52,6 +52,16 @@ model User {
   mfaFailedAttempts  Int       @default(0)
   mfaLockedUntil     DateTime?
 
+  // Soft deletion. Set = the account is deactivated: authentication is
+  // refused at login, at refresh, and by JwtAuthGuard on every request, so an
+  // already-issued access token stops working immediately rather than lasting
+  // out its 15 minutes. The row is kept because AuditLog references actors by
+  // id and the administrative history has to stay readable.
+  //
+  // Nullable with no default, so the migration is purely additive: every
+  // existing row is active and nothing needs backfilling.
+  deactivatedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -130,6 +140,9 @@ enum AuditAction {
   MEDIA_UPLOADED
   MEDIA_DELETED
   SUBMISSION_STATUS_CHANGED
+  USER_CREATED
+  USER_DEACTIVATED
+  USER_REACTIVATED
 }
 
 // Append-only by convention (enforced in the service layer, not the DB) —

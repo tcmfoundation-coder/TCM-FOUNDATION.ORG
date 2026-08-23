@@ -125,6 +125,18 @@ export class TokenService {
       throw new UnauthorizedException('Invalid or expired session');
     }
 
+    // Checked before the token is rotated: a deactivated account must not be
+    // able to trade a valid 30-day refresh token for a fresh access token and
+    // quietly keep its session alive.
+    const owner = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { deactivatedAt: true },
+    });
+    if (!owner || owner.deactivatedAt) {
+      await this.revokeAllForUser(payload.sub);
+      throw new UnauthorizedException('Invalid or expired session');
+    }
+
     await this.prisma.refreshToken.update({
       where: { id: payload.jti },
       data: { revokedAt: new Date() },

@@ -33,7 +33,11 @@ function generateTemporaryPassword(length = 20): string {
 
 export function CreateStaffUserForm({ onCreated }: { onCreated: () => void }) {
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
-  const [created, setCreated] = useState<{ email: string; temporaryPassword: string } | null>(null);
+  const [created, setCreated] = useState<{
+    email: string;
+    temporaryPassword: string;
+    emailDelivered: boolean;
+  } | null>(null);
   const {
     register,
     handleSubmit,
@@ -44,12 +48,12 @@ export function CreateStaffUserForm({ onCreated }: { onCreated: () => void }) {
     setStatus("loading");
     const temporaryPassword = generateTemporaryPassword();
     try {
-      await createStaffUser({
+      const result = await createStaffUser({
         email: values.email,
         temporaryPassword,
         initialRole: values.initialRole ? (values.initialRole as PrivilegedRole) : undefined,
       });
-      setCreated({ email: values.email, temporaryPassword });
+      setCreated({ email: values.email, temporaryPassword, emailDelivered: result.emailDelivered });
       setStatus("idle");
     } catch (error) {
       setStatus("error");
@@ -61,6 +65,13 @@ export function CreateStaffUserForm({ onCreated }: { onCreated: () => void }) {
     return (
       <div className="flex flex-col gap-4">
         <Alert variant="success">Account created for {created.email}.</Alert>
+        {!created.emailDelivered && (
+          <Alert variant="error">
+            The verification email couldn&apos;t be sent. The account was still created — share the temporary
+            password below directly, or ask them to use &quot;Forgot password&quot; once their email delivery
+            issue is resolved.
+          </Alert>
+        )}
         <div className="flex flex-col gap-1.5">
           <p className="text-sm font-medium text-stone-800">Temporary password</p>
           <p className="text-xs text-stone-500">

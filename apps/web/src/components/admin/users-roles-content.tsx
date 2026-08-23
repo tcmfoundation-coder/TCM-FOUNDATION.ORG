@@ -2,13 +2,19 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, ShieldAlert, ShieldCheck, ShieldOff, ShieldX } from "lucide-react";
+import { Loader2, Plus, ShieldAlert, ShieldCheck, ShieldOff, ShieldX } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Modal } from "../ui/modal";
 import { EmptyState } from "../ui/empty-state";
 import { assignRole, revokeRole } from "@/lib/api/roles";
-import { type PrivilegedRole, type StaffUser } from "@/lib/api/users";
+import {
+  deactivateStaffUser,
+  reactivateStaffUser,
+  type PrivilegedRole,
+  type StaffUser,
+} from "@/lib/api/users";
+import { ApiError } from "@/lib/api-client";
 import { CreateStaffUserForm } from "./create-staff-user-form";
 
 const ALL_ROLES: PrivilegedRole[] = ["CONTENT_EDITOR", "ADMINISTRATOR", "SUPER_ADMINISTRATOR"];
@@ -46,6 +52,7 @@ export function UsersRolesContent({
   const [createOpen, setCreateOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [deactivateTarget, setDeactivateTarget] = useState<StaffUser | null>(null);
 
   async function handleAssign(userId: string, role: PrivilegedRole) {
     const key = `${userId}:${role}:assign`;
@@ -70,6 +77,42 @@ export function UsersRolesContent({
       router.refresh();
     } catch {
       setActionError(`Couldn't revoke ${ROLE_LABELS[role]}. Please try again.`);
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function confirmDeactivate() {
+    if (!deactivateTarget) return;
+    const userId = deactivateTarget.id;
+    setPendingAction(`${userId}:deactivate`);
+    setActionError(null);
+    try {
+      await deactivateStaffUser(userId);
+      setDeactivateTarget(null);
+      router.refresh();
+    } catch (error) {
+      // Surfaced verbatim: the API's own message covers the specific reasons
+      // this can fail (last Super Administrator, self-deactivation), and a
+      // generic fallback would hide exactly the information the admin needs.
+      setActionError(
+        error instanceof ApiError ? error.message : "Couldn't deactivate this account. Please try again.",
+      );
+      setDeactivateTarget(null);
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function handleReactivate(userId: string) {
+    const key = `${userId}:reactivate`;
+    setPendingAction(key);
+    setActionError(null);
+    try {
+      await reactivateStaffUser(userId);
+      router.refresh();
+    } catch {
+      setActionError("Couldn't reactivate this account. Please try again.");
     } finally {
       setPendingAction(null);
     }
@@ -108,8 +151,13 @@ export function UsersRolesContent({
             </thead>
             <tbody className="divide-y divide-stone-100">
               {initialUsers.map((user) => (
-                <tr key={user.id}>
-                  <td className="px-4 py-3 align-top text-stone-800">{user.email}</td>
+                <tr key={user.id} className={user.deactivatedAt ? "opacity-60" : undefined}>
+                  <td className="px-4 py-3 align-top text-stone-800">
+                    <div className="flex items-center gap-2">
+                      <span>{user.email}</span>
+                      {user.deactivatedAt && <Badge tone="brand">Deactivated</Badge>}
+                    </div>
+                  </td>
                   <td className="px-4 py-3 align-top text-stone-600">{user.mfaEnabled ? "Enabled" : "Not set up"}</td>
                   <td className="px-4 py-3 align-top">
                     {user.roles.length === 0 ? (
@@ -159,13 +207,35 @@ export function UsersRolesContent({
                           <button
                             key={role}
                             type="button"
-                            disabled={pendingAction !== null}
+                            disabled={pendingAction !== null || Boolean(user.deactivatedAt)}
                             onClick={() => void handleAssign(user.id, role)}
                             className="rounded-sm border border-stone-300 px-2 py-1 text-xs text-stone-700 hover:border-brand-700 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             + {ROLE_LABELS[role]}
                           </button>
                         ))}
+                      </div>
+                      <div className="mt-2">
+                        {user.deactivatedAt ? (
+                          <button
+                            type="button"
+                            disabled={pendingAction !== null}
+                            onClick={() => void handleReactivate(user.id)}
+                            className="text-xs text-stone-700 underline decoration-dotted disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            Reactivate
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={pendingAction !== null || user.id === currentUserId}
+                            title={user.id === currentUserId ? "You can't deactivate your own account" : undefined}
+                            onClick={() => setDeactivateTarget(user)}
+                            className="text-xs text-error underline decoration-dotted disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            Deactivate
+                          </button>
+                        )}
                       </div>
                     </td>
                   )}
@@ -184,6 +254,37 @@ export function UsersRolesContent({
               router.refresh();
             }}
           />
+        </Modal>
+      )}
+
+      {canManage && (
+        <Modal open={deactivateTarget !== null} onClose={() => setDeactivateTarget(null)} title="Deactivate account">
+          <div className="flex flex-col gap-4">
+            <p className="text-sm text-stone-700">
+              {deactivateTarget && (
+                <>
+                  <strong>{deactivateTarget.email}</strong> will immediately lose access — their current session
+                  ends and they can&apos;t sign back in until an administrator reactivates the account.
+                </>
+              )}
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setDeactivateTarget(null)}>
+                Cancel
+              </Button>
+              <button
+                type="button"
+                disabled={pendingAction !== null}
+                onClick={() => void confirmDeactivate()}
+                className="inline-flex items-center justify-center gap-2 rounded-sm bg-error px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-error/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-error disabled:pointer-events-none disabled:opacity-50"
+              >
+                {pendingAction === `${deactivateTarget?.id}:deactivate` && (
+                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                )}
+                Deactivate
+              </button>
+            </div>
+          </div>
         </Modal>
       )}
     </div>
