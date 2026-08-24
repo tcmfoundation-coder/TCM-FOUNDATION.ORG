@@ -23,5 +23,6 @@ import { AuthModule } from '../identity/auth/auth.module';
       inject: [ConfigService],
     },
   ],
+  exports: [MediaService],
 })
 export class MediaModule {}

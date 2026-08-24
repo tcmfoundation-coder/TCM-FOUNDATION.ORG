@@ -1,5 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { v2 as cloudinary } from 'cloudinary';
 import { MediaType } from '@prisma/client';
 import { MediaService } from './media.service';
@@ -114,6 +118,7 @@ describe('MediaService', () => {
             cloudinaryPublicId: media.cloudinaryPublicId,
             secureUrl: media.secureUrl,
             type: MediaType.IMAGE,
+            mimeType: 'image/jpeg',
             altText: media.altText,
             uploadedById: 'actor-1',
           }),
@@ -224,6 +229,130 @@ describe('MediaService', () => {
         NotFoundException,
       );
       expect(cloudinary.uploader.destroy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('streamById', () => {
+    // Replaces the earlier approach of handing the browser a Cloudinary URL
+    // directly — see media.service.ts's doc comment for why (a hand-built
+    // fl_attachment URL broke in production; a cross-origin <a download>
+    // can't reliably force a save even when the URL is fine). global.fetch
+    // is mocked rather than hitting real Cloudinary, same rationale as the
+    // rest of this file mocking the cloudinary SDK.
+    let fetchSpy: jest.SpiedFunction<typeof fetch>;
+
+    beforeEach(() => {
+      fetchSpy = jest.spyOn(global, 'fetch');
+    });
+
+    afterEach(() => {
+      fetchSpy.mockRestore();
+    });
+
+    function mockUpstream(body: string, init: ResponseInit = {}) {
+      fetchSpy.mockResolvedValue(new Response(body, { status: 200, ...init }));
+    }
+
+    it('streams the real bytes via a Readable, never buffering them into a Buffer/string first', async () => {
+      prisma.media.findUnique.mockResolvedValue({
+        secureUrl: 'https://res.cloudinary.com/tcm/raw/upload/report.pdf',
+        cloudinaryPublicId: 'tcm/report.pdf',
+        mimeType: 'application/pdf',
+      });
+      mockUpstream('%PDF-1.3 fake bytes', {
+        headers: { 'content-length': '19' },
+      });
+
+      const result = await service.streamById(media.id);
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'https://res.cloudinary.com/tcm/raw/upload/report.pdf',
+      );
+      expect(result.contentType).toBe('application/pdf');
+      expect(result.contentLength).toBe(19);
+      expect(result.extension).toBe('pdf');
+      // A Readable exposes chunks via events/pipe — it does not hold the
+      // whole payload as a single in-memory value the way a Buffer would.
+      expect(typeof result.stream.pipe).toBe('function');
+      const chunks: Buffer[] = [];
+      for await (const chunk of result.stream) chunks.push(chunk as Buffer);
+      expect(Buffer.concat(chunks).toString()).toBe('%PDF-1.3 fake bytes');
+    });
+
+    it('falls back to an extension parsed from the public ID when mimeType is null (pre-migration rows)', async () => {
+      prisma.media.findUnique.mockResolvedValue({
+        secureUrl: 'https://res.cloudinary.com/tcm/image/upload/photo.png',
+        cloudinaryPublicId: 'tcm/photo.png',
+        mimeType: null,
+      });
+      mockUpstream('fake png bytes');
+
+      const result = await service.streamById(media.id);
+
+      expect(result.extension).toBe('png');
+      expect(result.contentType).toBe('image/png');
+    });
+
+    it('falls back to application/octet-stream when neither mimeType nor a recognizable extension is available', async () => {
+      prisma.media.findUnique.mockResolvedValue({
+        secureUrl: 'https://res.cloudinary.com/tcm/raw/upload/x7f3k9d2',
+        cloudinaryPublicId: 'tcm/x7f3k9d2',
+        mimeType: null,
+      });
+      mockUpstream('legacy pre-fix upload with no extension anywhere');
+
+      const result = await service.streamById(media.id);
+
+      expect(result.extension).toBeUndefined();
+      expect(result.contentType).toBe('application/octet-stream');
+    });
+
+    it('throws NotFoundException for a missing media row, without calling fetch', async () => {
+      prisma.media.findUnique.mockResolvedValue(null);
+
+      await expect(service.streamById('missing')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('refuses to fetch a secureUrl that is not a recognized Cloudinary delivery URL', async () => {
+      prisma.media.findUnique.mockResolvedValue({
+        secureUrl: 'https://attacker.example/steal-me',
+        cloudinaryPublicId: 'tcm/whatever',
+        mimeType: 'application/pdf',
+      });
+
+      await expect(service.streamById(media.id)).rejects.toThrow(
+        BadGatewayException,
+      );
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('surfaces a network failure reaching storage as BadGatewayException', async () => {
+      prisma.media.findUnique.mockResolvedValue({
+        secureUrl: 'https://res.cloudinary.com/tcm/raw/upload/report.pdf',
+        cloudinaryPublicId: 'tcm/report.pdf',
+        mimeType: 'application/pdf',
+      });
+      fetchSpy.mockRejectedValue(new Error('network down'));
+
+      await expect(service.streamById(media.id)).rejects.toThrow(
+        BadGatewayException,
+      );
+    });
+
+    it('treats a non-2xx upstream response as the file being gone from storage', async () => {
+      prisma.media.findUnique.mockResolvedValue({
+        secureUrl: 'https://res.cloudinary.com/tcm/raw/upload/report.pdf',
+        cloudinaryPublicId: 'tcm/report.pdf',
+        mimeType: 'application/pdf',
+      });
+      fetchSpy.mockResolvedValue(new Response(null, { status: 404 }));
+
+      await expect(service.streamById(media.id)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 

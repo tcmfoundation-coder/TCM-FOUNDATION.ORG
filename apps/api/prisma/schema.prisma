@@ -181,6 +181,12 @@ model Media {
   cloudinaryPublicId String    @unique
   secureUrl          String
   type               MediaType
+  // The exact upload MIME type (e.g. "application/pdf"), not just the
+  // coarse MediaType bucket — lets the download endpoint set a correct
+  // Content-Type without guessing from the delivery URL's extension.
+  // Nullable: rows created before this column existed have no value and
+  // fall back to extension-based detection (see media.service.ts).
+  mimeType           String?
   altText            String
   width              Int?
   height             Int?

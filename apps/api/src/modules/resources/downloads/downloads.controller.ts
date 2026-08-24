@@ -4,11 +4,13 @@ import {
   Delete,
   Get,
   HttpCode,
+  NotFoundException,
   Param,
   Patch,
   Post,
   Query,
   Req,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
@@ -21,10 +23,18 @@ import { SetDownloadPublicationDto } from './dto/set-download-publication.dto';
 import { JwtAuthGuard } from '../../identity/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../identity/auth/guards/roles.guard';
 import { Roles } from '../../identity/auth/decorators/roles.decorator';
+import { MediaService } from '../../media/media.service';
+import {
+  buildContentDisposition,
+  buildDownloadFilename,
+} from '../../media/download-filename.util';
 
 @Controller('downloads')
 export class DownloadsController {
-  constructor(private readonly downloads: DownloadsService) {}
+  constructor(
+    private readonly downloads: DownloadsService,
+    private readonly media: MediaService,
+  ) {}
 
   // Same validated DTO the admin route uses — see the note on the other
   // public list routes.
@@ -58,6 +68,28 @@ export class DownloadsController {
   @Get(':slug')
   getBySlug(@Param('slug') slug: string) {
     return this.downloads.getBySlug(slug);
+  }
+
+  // The API is the only thing the browser ever talks to for a download —
+  // getBySlug already 404s for a missing/unpublished download, so this
+  // inherits the same public-visibility rule as the metadata route. See
+  // media.service.ts's streamById doc comment for why this replaced handing
+  // the browser a Cloudinary URL directly (it broke in production, and a
+  // cross-origin link can't reliably force a download anyway).
+  @Get(':slug/file')
+  async downloadFile(@Param('slug') slug: string): Promise<StreamableFile> {
+    const download = await this.downloads.getBySlug(slug);
+    if (!download.file) {
+      throw new NotFoundException('This resource has no file attached yet');
+    }
+    const { stream, contentType, contentLength, extension } =
+      await this.media.streamById(download.file.id);
+    const filename = buildDownloadFilename(download.title, extension);
+    return new StreamableFile(stream, {
+      type: contentType,
+      disposition: buildContentDisposition(filename),
+      length: contentLength,
+    });
   }
 
   @Post()

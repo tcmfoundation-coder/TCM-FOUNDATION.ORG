@@ -10,6 +10,7 @@ import {
   Post,
   Query,
   Req,
+  StreamableFile,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -29,6 +30,10 @@ import {
   ALLOWED_MEDIA_MIME_TYPES,
   MAX_MEDIA_UPLOAD_BYTES,
 } from './media.constants';
+import {
+  buildContentDisposition,
+  buildDownloadFilename,
+} from './download-filename.util';
 
 @Controller('media')
 export class MediaController {
@@ -54,6 +59,30 @@ export class MediaController {
   )
   getById(@Param('id') id: string) {
     return this.media.getById(id);
+  }
+
+  // The API is the only thing the browser ever talks to for a download —
+  // see media.service.ts's streamById doc comment for why (a Cloudinary URL
+  // handed straight to the browser broke in production and can't reliably
+  // force a download cross-origin anyway). Genuinely streams the bytes
+  // through, never buffers the whole file in memory.
+  @Get(':id/download')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(
+    PrivilegedRole.CONTENT_EDITOR,
+    PrivilegedRole.ADMINISTRATOR,
+    PrivilegedRole.SUPER_ADMINISTRATOR,
+  )
+  async download(@Param('id') id: string): Promise<StreamableFile> {
+    const media = await this.media.getById(id);
+    const { stream, contentType, contentLength, extension } =
+      await this.media.streamById(id);
+    const filename = buildDownloadFilename(media.altText, extension);
+    return new StreamableFile(stream, {
+      type: contentType,
+      disposition: buildContentDisposition(filename),
+      length: contentLength,
+    });
   }
 
   @Post('upload')
