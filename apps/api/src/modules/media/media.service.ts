@@ -8,7 +8,10 @@ import { MediaType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditLogService } from '../audit/audit-log.service';
 import { UpdateMediaDto } from './dto/update-media.dto';
-import { MIME_TO_MEDIA_TYPE } from './media.constants';
+import {
+  DOCUMENT_MIME_TO_EXTENSION,
+  MIME_TO_MEDIA_TYPE,
+} from './media.constants';
 
 const PUBLIC_SELECT = {
   id: true,
@@ -77,7 +80,7 @@ export class MediaService {
 
     let result: UploadApiResponse;
     try {
-      result = await this.uploadBuffer(file.buffer, mediaType);
+      result = await this.uploadBuffer(file.buffer, mediaType, file.mimetype);
     } catch {
       throw new BadRequestException('Failed to upload file to media storage');
     }
@@ -110,6 +113,7 @@ export class MediaService {
   private uploadBuffer(
     buffer: Buffer,
     mediaType: MediaType,
+    mimetype: string,
   ): Promise<UploadApiResponse> {
     const resourceType =
       mediaType === MediaType.VIDEO
@@ -118,9 +122,16 @@ export class MediaService {
           ? 'raw'
           : 'image';
 
+    // 'raw' is the one resource_type Cloudinary does not inspect to derive
+    // a format — without this, the delivery URL comes back with no
+    // extension and downloads get served with an undetermined Content-Type
+    // instead of application/pdf (etc). image/video keep auto-detection.
+    const format =
+      resourceType === 'raw' ? DOCUMENT_MIME_TO_EXTENSION[mimetype] : undefined;
+
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
-        { resource_type: resourceType },
+        { resource_type: resourceType, ...(format ? { format } : {}) },
         (error, result) => {
           if (error || !result) {
             reject(

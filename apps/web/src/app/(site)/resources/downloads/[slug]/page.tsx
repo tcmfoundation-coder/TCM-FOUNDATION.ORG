@@ -4,6 +4,7 @@ import { getDownloadBySlug } from "@/lib/api/downloads";
 import { fetchOrNotFound } from "@/lib/api/fetch-or-not-found";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { buildMetadata } from "@/lib/seo";
+import { buildCloudinaryAttachmentUrl, sanitizeDownloadFilename } from "@/lib/cloudinary-download";
 
 export async function generateMetadata({ params }: PageProps<"/resources/downloads/[slug]">): Promise<Metadata> {
   const { slug } = await params;
@@ -35,8 +36,8 @@ export default async function DownloadPage({ params }: PageProps<"/resources/dow
 
       {download.file ? (
         <a
-          href={download.file.secureUrl}
-          download
+          href={buildCloudinaryAttachmentUrl(download.file.secureUrl, download.title)}
+          download={sanitizeDownloadFilename(download.title)}
           className="mt-10 inline-flex items-center gap-2 rounded-sm bg-brand-700 px-5 py-3 text-sm font-medium text-white hover:bg-brand-800"
         >
           <DownloadIcon aria-hidden="true" className="size-4" />

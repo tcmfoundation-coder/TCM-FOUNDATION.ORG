@@ -16,6 +16,7 @@ import {
   updateMedia,
   type Media,
 } from "@/lib/api/media";
+import { buildCloudinaryAttachmentUrl, sanitizeDownloadFilename } from "@/lib/cloudinary-download";
 
 export function MediaList() {
   const [media, setMedia] = useState<Media[]>([]);
@@ -89,9 +90,13 @@ export function MediaList() {
   }
 
   function handleDownload(mediaItem: Media) {
+    // fl_attachment forces a real Content-Disposition: attachment from
+    // Cloudinary — the plain `download` attribute this used to rely on is
+    // ignored by browsers for cross-origin links (res.cloudinary.com is
+    // cross-origin from the admin app). See cloudinary-download.ts.
     const link = document.createElement("a");
-    link.href = mediaItem.secureUrl;
-    link.download = mediaItem.altText || "download";
+    link.href = buildCloudinaryAttachmentUrl(mediaItem.secureUrl, mediaItem.altText);
+    link.download = sanitizeDownloadFilename(mediaItem.altText);
     link.click();
   }
 
