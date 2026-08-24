@@ -127,6 +127,50 @@ describe('MediaService', () => {
       );
     });
 
+    it('uploads a PDF with resource_type raw and an explicit pdf format, so the delivery URL gets a real extension', async () => {
+      mockUploadStream({
+        result: {
+          public_id: 'tcm/report-123.pdf',
+          secure_url:
+            'https://res.cloudinary.com/tcm/raw/upload/report-123.pdf',
+        },
+      });
+      prisma.media.create.mockResolvedValue({
+        ...media,
+        cloudinaryPublicId: 'tcm/report-123.pdf',
+        secureUrl: 'https://res.cloudinary.com/tcm/raw/upload/report-123.pdf',
+        type: MediaType.DOCUMENT,
+      });
+
+      await service.upload(
+        fakeFile({ originalname: 'report.pdf', mimetype: 'application/pdf' }),
+        'Annual report',
+        'actor-1',
+      );
+
+      expect(cloudinary.uploader.upload_stream).toHaveBeenCalledWith(
+        { resource_type: 'raw', format: 'pdf' },
+        expect.any(Function),
+      );
+    });
+
+    it('does not pass a format for image uploads, leaving Cloudinary auto-detection in place', async () => {
+      mockUploadStream({
+        result: {
+          public_id: media.cloudinaryPublicId,
+          secure_url: media.secureUrl,
+        },
+      });
+      prisma.media.create.mockResolvedValue(media);
+
+      await service.upload(fakeFile(), media.altText, 'actor-1');
+
+      expect(cloudinary.uploader.upload_stream).toHaveBeenCalledWith(
+        { resource_type: 'image' },
+        expect.any(Function),
+      );
+    });
+
     it('rejects an unsupported file type before touching Cloudinary or the database', async () => {
       await expect(
         service.upload(
