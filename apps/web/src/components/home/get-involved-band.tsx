@@ -72,7 +72,7 @@ export function GetInvolvedBand() {
         <div className="grid gap-4 lg:grid-cols-3">
           <Link
             href={PRIMARY_ACTION.href}
-            className="group flex flex-col justify-between gap-6 rounded-xl bg-white p-6 text-brand-950 transition-transform duration-300 hover:-translate-y-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white lg:row-span-3 lg:p-8"
+            className="group flex flex-col justify-between gap-6 rounded-sm bg-white p-6 text-brand-950 transition-transform duration-300 hover:-translate-y-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white lg:row-span-3 lg:p-8"
           >
             <div className="flex flex-col gap-3">
               <PRIMARY_ACTION.icon aria-hidden="true" className="size-7 text-brand-700" />
@@ -95,7 +95,7 @@ export function GetInvolvedBand() {
               <Link
                 key={action.href}
                 href={action.href}
-                className="group flex items-center gap-4 rounded-xl border border-white/20 bg-white/5 p-5 transition-colors duration-300 hover:border-white/40 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white lg:p-6"
+                className="group flex items-center gap-4 rounded-sm border border-white/20 bg-white/5 p-5 transition-colors duration-300 hover:border-white/40 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white lg:p-6"
               >
                 <action.icon aria-hidden="true" className="size-6 shrink-0 text-white/70" />
                 <span className="flex min-w-0 flex-col">
