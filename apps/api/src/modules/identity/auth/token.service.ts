@@ -94,6 +94,29 @@ export class TokenService {
    * a new access/refresh pair is issued. If a token that's already revoked
    * is presented again, that is treated as reuse of a stolen token — every
    * refresh token for that user is revoked and the caller must re-login.
+   *
+   * No tolerance window here, deliberately. An earlier version of this
+   * method tried to except "two genuinely concurrent legitimate callers
+   * from the same browser" (proxy.ts's own refresh racing the browser's)
+   * from that rule, on the theory that a live successor token created in
+   * the same instant proves the revocation was an ordinary rotation, not a
+   * security nuke. That theory was wrong: an ORDINARY rotation always,
+   * unconditionally, creates exactly that live successor as part of
+   * rotating — so the same signal is produced by a straightforward replay
+   * of the just-rotated token moments later, which is exactly the case
+   * reuse detection exists to catch. CI's own e2e suite caught this
+   * (auth.e2e-spec.ts's rotate-then-replay-the-original test) before it
+   * shipped. The concurrent-caller race this was trying to fix is real
+   * (see proxy.ts's refreshAdminSession doc comment) but is not solvable by
+   * any signal available at this layer — closing it needs either routing
+   * proxy's refresh through the browser's own single-flight mechanism
+   * instead of a second independent caller, or a real parent/child link
+   * between a token and its successor (schema change), neither of which
+   * belongs in a fix for the original session-expiration bug. Left as a
+   * known, narrow limitation: the affected case (a client fetch already in
+   * flight at the exact moment a fresh /admin/* navigation also needs to
+   * refresh) forces a re-login — the same outcome every access-token
+   * expiry produced before this file's other fix, not a new failure mode.
    */
   async rotateRefreshToken(
     presentedToken: string,
@@ -125,29 +148,41 @@ export class TokenService {
       throw new UnauthorizedException('Invalid or expired session');
     }
 
-    // Checked before the token is rotated: a deactivated account must not be
-    // able to trade a valid 30-day refresh token for a fresh access token and
-    // quietly keep its session alive.
-    const owner = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
-      select: { deactivatedAt: true },
-    });
-    if (!owner || owner.deactivatedAt) {
-      await this.revokeAllForUser(payload.sub);
-      throw new UnauthorizedException('Invalid or expired session');
-    }
-
     await this.prisma.refreshToken.update({
       where: { id: payload.jti },
       data: { revokedAt: new Date() },
     });
 
+    return this.issueFreshPairFor(payload.sub);
+  }
+
+  /**
+   * Deactivation check + issuing a brand-new access/refresh pair — pulled
+   * out of rotateRefreshToken purely so signing the access token and
+   * issuing the refresh token read the same regardless of which caller
+   * needed them.
+   */
+  private async issueFreshPairFor(
+    userId: string,
+  ): Promise<{ accessToken: string; refreshToken: string; userId: string }> {
+    // Checked on every rotation: a deactivated account must not be able to
+    // trade a valid 30-day refresh token for a fresh access token and
+    // quietly keep its session alive.
+    const owner = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { deactivatedAt: true },
+    });
+    if (!owner || owner.deactivatedAt) {
+      await this.revokeAllForUser(userId);
+      throw new UnauthorizedException('Invalid or expired session');
+    }
+
     const [accessToken, refreshToken] = await Promise.all([
-      Promise.resolve(this.signAccessToken(payload.sub)),
-      this.issueRefreshToken(payload.sub),
+      Promise.resolve(this.signAccessToken(userId)),
+      this.issueRefreshToken(userId),
     ]);
 
-    return { accessToken, refreshToken, userId: payload.sub };
+    return { accessToken, refreshToken, userId };
   }
 
   /** Returns the token's owning userId (for audit logging) if it was valid, else undefined. */

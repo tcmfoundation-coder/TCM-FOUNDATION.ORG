@@ -27,9 +27,20 @@ const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
 };
 const GOOGLE_ERROR_FALLBACK = "Google sign-in failed. Please try again or sign in with your email and password.";
 
-export function LoginForm({ googleEnabled, googleError }: { googleEnabled: boolean; googleError?: string }) {
+export function LoginForm({
+  googleEnabled,
+  googleError,
+  sessionExpired,
+}: {
+  googleEnabled: boolean;
+  googleError?: string;
+  /** Landed here via api-client's terminal-401 redirect — the session (not the password) is why they're back here. */
+  sessionExpired?: boolean;
+}) {
   const router = useRouter();
-  const [status, setStatus] = useState<"idle" | "loading" | "error">(googleError ? "error" : "idle");
+  const [status, setStatus] = useState<"idle" | "loading" | "error" | "session-expired">(
+    googleError ? "error" : sessionExpired ? "session-expired" : "idle",
+  );
   const [errorMessage, setErrorMessage] = useState<string>(
     googleError ? (GOOGLE_ERROR_MESSAGES[googleError] ?? GOOGLE_ERROR_FALLBACK) : "",
   );
@@ -64,6 +75,7 @@ export function LoginForm({ googleEnabled, googleError }: { googleEnabled: boole
   return (
     <div className="flex flex-col gap-6">
       {status === "error" && <Alert variant="error">{errorMessage}</Alert>}
+      {status === "session-expired" && <Alert variant="info">Your session expired. Please sign in again.</Alert>}
 
       <form onSubmit={(e) => void handleSubmit(onSubmit)(e)} className="flex flex-col gap-5">
         <Input

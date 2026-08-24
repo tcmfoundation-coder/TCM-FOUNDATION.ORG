@@ -14,8 +14,7 @@ import type { MyRoles } from "@/lib/api/roles";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { AccessDenied } from "./access-denied";
-import { DashboardMetrics } from "./dashboard-metrics";
-import { DashboardRecentActivity } from "./dashboard-recent-activity";
+import { DashboardAnalyticsSection } from "./dashboard-analytics";
 
 const ROLE_LABELS: Record<string, string> = {
   CONTENT_EDITOR: "Content Editor",
@@ -53,7 +52,6 @@ export function DashboardContent({ data }: { data: MyRoles }) {
   const activeRoles = data.roles.filter((r) => r.status === "ACTIVE");
   const activeRoleNames = activeRoles.map((r) => r.role);
   const canManage = activeRoleNames.includes("ADMINISTRATOR") || activeRoleNames.includes("SUPER_ADMINISTRATOR");
-  const isSuperAdmin = activeRoleNames.includes("SUPER_ADMINISTRATOR");
 
   // An authenticated account with no role grant at all (or only
   // expired/revoked ones) has nothing to do here — a real access-denied
@@ -88,12 +86,7 @@ export function DashboardContent({ data }: { data: MyRoles }) {
 
       {activeRoles.length > 0 && (
         <>
-          <div className="flex flex-col gap-3">
-            <h3 className="text-sm font-medium uppercase tracking-wide text-stone-500">Overview</h3>
-            <DashboardMetrics roles={activeRoleNames} />
-          </div>
-
-          {isSuperAdmin && <DashboardRecentActivity />}
+          <DashboardAnalyticsSection />
 
           <div className="flex flex-col gap-3">
             <h3 className="text-sm font-medium uppercase tracking-wide text-stone-500">Quick Actions</h3>

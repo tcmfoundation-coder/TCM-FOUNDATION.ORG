@@ -19,9 +19,12 @@ type FetchCall = { url: string; method: string };
 let calls: FetchCall[] = [];
 let responder: (call: FetchCall, n: number) => { status: number; body?: unknown };
 
-async function loadClient() {
+// Defaults to a neutral, non-admin path so existing tests (which don't care
+// about the terminal-401 redirect) aren't affected by it regardless of
+// refresh outcome. Tests that DO care pass their own pathname.
+async function loadClient(pathname = "/") {
   vi.resetModules();
-  vi.stubGlobal("window", { location: { protocol: "https:" } });
+  vi.stubGlobal("window", { location: { protocol: "https:", pathname, assign: vi.fn() } });
   vi.stubGlobal("fetch", (input: string, init?: RequestInit) => {
     const call = { url: String(input), method: (init?.method ?? "GET").toUpperCase() };
     calls.push(call);
@@ -106,7 +109,7 @@ describe("single-flight (guards against reuse detection revoking all sessions)",
 });
 
 describe("paths that must never trigger a refresh", () => {
-  it.each(["/auth/login", "/auth/logout", "/auth/refresh"])(
+  it.each(["/auth/login", "/auth/logout", "/auth/refresh", "/auth/mfa/login-verify"])(
     "does not refresh-and-retry a 401 from %s",
     async (path) => {
       responder = () => ({ status: 401 });
@@ -116,4 +119,54 @@ describe("paths that must never trigger a refresh", () => {
       expect(calls).toHaveLength(1);
     },
   );
+});
+
+/**
+ * Regression coverage for the other half of the session-expiration bug: once
+ * a refresh has been attempted and the session is confirmed dead (refresh
+ * token expired/revoked/reused, or the account was deactivated), the admin
+ * app must not strand the user on a page that still looks authenticated —
+ * see the various admin list components that previously just set a generic
+ * "Failed to load X" error and stopped. The API has already cleared the
+ * cookies by this point (AuthService.refresh's catch path); the client's only
+ * remaining job is to leave the dead page.
+ */
+describe("terminal session death redirects to login", () => {
+  it("redirects when a 401 survives refresh-and-retry on an admin page", async () => {
+    responder = () => ({ status: 401 });
+    const { apiClient } = await loadClient("/admin/content/programs");
+    await expect(apiClient.get("/programs/admin")).rejects.toThrow();
+    expect(window.location.assign).toHaveBeenCalledWith("/admin/login?sessionExpired=1");
+  });
+
+  it("does not redirect a page outside /admin (this client also serves the public site)", async () => {
+    responder = () => ({ status: 401 });
+    const { apiClient } = await loadClient("/programs");
+    await expect(apiClient.get("/some-authed-endpoint")).rejects.toThrow();
+    expect(window.location.assign).not.toHaveBeenCalled();
+  });
+
+  it("does not redirect-loop when already on the login page", async () => {
+    responder = () => ({ status: 401 });
+    const { apiClient } = await loadClient("/admin/login");
+    await expect(apiClient.post("/some-authed-endpoint", {})).rejects.toThrow();
+    expect(window.location.assign).not.toHaveBeenCalled();
+  });
+
+  it("does not redirect a wrong MFA code away from the MFA screen", async () => {
+    responder = () => ({ status: 401 });
+    const { apiClient } = await loadClient("/admin/mfa-verify");
+    await expect(apiClient.post("/auth/mfa/login-verify", { code: "000000" })).rejects.toThrow();
+    expect(window.location.assign).not.toHaveBeenCalled();
+  });
+
+  it("does not redirect when the retried request succeeds", async () => {
+    responder = (call, n) => {
+      if (isRefresh(call)) return { status: 200 };
+      return n === 1 ? { status: 401 } : { status: 200, body: { ok: true } };
+    };
+    const { apiClient } = await loadClient("/admin/dashboard");
+    await expect(apiClient.get("/roles/me")).resolves.toEqual({ ok: true });
+    expect(window.location.assign).not.toHaveBeenCalled();
+  });
 });

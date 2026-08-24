@@ -39,6 +39,8 @@ import { MediaModule } from './modules/media/media.module';
 import { AuditLogModule } from './modules/audit/audit.module';
 import { AuditModule } from './modules/audit/audit-api.module';
 
+import { DashboardModule } from './modules/dashboard/dashboard.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -91,6 +93,9 @@ import { AuditModule } from './modules/audit/audit-api.module';
     // Audit domain
     AuditLogModule,
     AuditModule,
+
+    // Dashboard domain
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
