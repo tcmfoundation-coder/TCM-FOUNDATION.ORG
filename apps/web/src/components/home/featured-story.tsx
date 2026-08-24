@@ -37,7 +37,7 @@ export async function FeaturedStory() {
         />
       ) : (
         <div className="group relative grid gap-10 md:grid-cols-2 md:items-center md:gap-16">
-          <div className="relative aspect-[4/3] overflow-hidden rounded-2xl bg-gradient-to-br from-brand-100 to-brand-300 md:order-2">
+          <div className="relative aspect-[4/3] overflow-hidden rounded-sm bg-gradient-to-br from-brand-100 to-brand-300 md:order-2">
             {story.coverImage && (
               <Image
                 src={story.coverImage.secureUrl}

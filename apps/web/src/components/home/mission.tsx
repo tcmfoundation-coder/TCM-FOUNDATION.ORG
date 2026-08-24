@@ -31,7 +31,12 @@ export async function Mission() {
           <h2 className="font-display text-3xl font-medium tracking-tight text-stone-900 md:text-4xl">
             Building a future where every Muslim woman can thrive.
           </h2>
-          <p className="rounded-sm border border-dashed border-stone-300 bg-stone-50 px-4 py-3 text-sm text-stone-500">
+          {/* Editorial "in progress" treatment rather than a dashed debug box —
+              a quiet pull-quote rule rather than a placeholder callout — so the
+              section still reads as considered even while the real copy is
+              pending. Swapping this paragraph for the confirmed mission text
+              needs no other change to the section. */}
+          <p className="border-l-2 border-brand-200 pl-4 text-sm italic leading-relaxed text-stone-500">
             TCM Foundation&apos;s full mission, vision, and history are being finalized and will appear here.
           </p>
           <Link
@@ -46,7 +51,7 @@ export async function Mission() {
           </Link>
         </div>
 
-        <div className="relative aspect-[4/3] overflow-hidden rounded-2xl bg-brand-900">
+        <div className="relative aspect-[4/3] overflow-hidden rounded-sm bg-brand-900">
           {image ? (
             <Image
               src={image.secureUrl}
