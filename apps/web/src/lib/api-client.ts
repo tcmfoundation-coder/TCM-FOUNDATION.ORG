@@ -90,10 +90,15 @@ function refreshSession(): Promise<boolean> {
   return refreshInFlight;
 }
 
-// Endpoints that must never trigger a refresh-and-retry: refresh itself would
-// recurse, and a 401 from these is the real answer rather than an expired
-// token.
-const NO_RETRY_PATHS = ["/auth/refresh", "/auth/login", "/auth/logout"];
+// Endpoints that must never trigger a refresh-and-retry, and must never
+// trigger the terminal-401 redirect below: refresh itself would recurse, and
+// a 401 from any of these is itself the real answer (wrong password, wrong
+// TOTP code, not-yet-authenticated) rather than a sign that an established
+// session died mid-use. mfa/login-verify in particular has no refresh_token
+// cookie yet at that stage of login (only mfa_pending_token) — attempting a
+// refresh there is always a guaranteed no-op, and without this exclusion a
+// mistyped code would incorrectly bounce the user off the MFA screen.
+const NO_RETRY_PATHS = ["/auth/refresh", "/auth/login", "/auth/logout", "/auth/mfa/login-verify"];
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, headers, revalidateSeconds, ...rest } = options;
@@ -134,6 +139,30 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   ) {
     if (await refreshSession()) {
       response = await send();
+    }
+
+    // Refresh was attempted (this path is never in NO_RETRY_PATHS) and the
+    // request is still 401: the session is genuinely over — either refresh
+    // itself failed (expired/revoked/reused token, deactivated account), or
+    // it "succeeded" but the retried request 401'd anyway (e.g. deactivated
+    // in the instant between). Either way the API has already cleared the
+    // auth cookies on its response by this point (see AuthService.refresh's
+    // catch path), so there's nothing left to clear here — only somewhere to
+    // send the admin so the UI stops looking authenticated. Scoped to the
+    // admin app specifically: this module also serves the public site's own
+    // fetches, which must never be redirected to an admin login screen.
+    if (
+      response.status === 401 &&
+      window.location.pathname.startsWith("/admin") &&
+      window.location.pathname !== "/admin/login"
+    ) {
+      // A full hard navigation is deliberate, not a shortcut: this module is
+      // a plain fetch wrapper with no access to useRouter(), and the point
+      // is to force the whole authenticated shell (role-gated sidebar, nav)
+      // to be torn down and rebuilt from scratch against zero cookies —
+      // exactly what a client-side route transition does NOT do.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- deliberate full reload, see above
+      window.location.assign("/admin/login?sessionExpired=1");
     }
   }
 

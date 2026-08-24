@@ -3,6 +3,12 @@
 
 export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60; // 15 minutes
 export const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
+
+// How long a just-rotated (revoked) refresh token is still tolerated as a
+// concurrent legitimate caller rather than flagged as reuse of a stolen
+// token — see TokenService.rotateRefreshToken's doc comment. Real replay of
+// a captured token is never seconds behind the legitimate rotation.
+export const REFRESH_REUSE_GRACE_MS = 10_000;
 export const MFA_PENDING_TOKEN_TTL_SECONDS = 5 * 60; // 5 minutes
 export const OAUTH_STATE_TTL_SECONDS = 10 * 60; // 10 minutes — matches oauth-state.util.ts
 export const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours

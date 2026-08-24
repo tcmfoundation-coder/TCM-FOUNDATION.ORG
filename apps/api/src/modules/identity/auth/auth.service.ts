@@ -233,16 +233,27 @@ export class AuthService {
   }
 
   async refresh(refreshTokenCookie: string, res: Response): Promise<void> {
-    const { accessToken, refreshToken } =
-      await this.tokens.rotateRefreshToken(refreshTokenCookie);
-    setAuthCookies(
-      res,
-      { accessToken, refreshToken },
-      {
-        accessTtlSeconds: ACCESS_TOKEN_TTL_SECONDS,
-        refreshTtlSeconds: REFRESH_TOKEN_TTL_SECONDS,
-      },
-    );
+    try {
+      const { accessToken, refreshToken } =
+        await this.tokens.rotateRefreshToken(refreshTokenCookie);
+      setAuthCookies(
+        res,
+        { accessToken, refreshToken },
+        {
+          accessTtlSeconds: ACCESS_TOKEN_TTL_SECONDS,
+          refreshTtlSeconds: REFRESH_TOKEN_TTL_SECONDS,
+        },
+      );
+    } catch (error) {
+      // A refresh that fails (expired/revoked/reused token, deactivated
+      // owner) means the session is over — clear the now-useless cookies on
+      // this same response rather than leaving a dead refresh_token sitting
+      // in the browser for up to 30 days, re-attempting (and re-failing) a
+      // refresh on every subsequent request until it happens to fall out of
+      // the client's own retry path.
+      clearAuthCookies(res);
+      throw error;
+    }
   }
 
   async logout(

@@ -21,7 +21,7 @@ export default async function AdminLoginPage({ searchParams }: PageProps<"/admin
   await redirectIfSignedIn();
 
   const config = await getAuthConfigOrDefault();
-  const { error } = await searchParams;
+  const { error, sessionExpired } = await searchParams;
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-stone-100 p-4 sm:p-8">
@@ -48,6 +48,7 @@ export default async function AdminLoginPage({ searchParams }: PageProps<"/admin
             <LoginForm
               googleEnabled={config.googleEnabled}
               googleError={typeof error === "string" ? error : undefined}
+              sessionExpired={typeof sessionExpired === "string"}
             />
           </div>
         </div>

@@ -6,6 +6,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import {
   ACCESS_TOKEN_TTL_SECONDS,
   MFA_PENDING_TOKEN_TTL_SECONDS,
+  REFRESH_REUSE_GRACE_MS,
   REFRESH_TOKEN_TTL_SECONDS,
 } from './auth.constants';
 import { hashToken } from './crypto.util';
@@ -94,6 +95,17 @@ export class TokenService {
    * a new access/refresh pair is issued. If a token that's already revoked
    * is presented again, that is treated as reuse of a stolen token — every
    * refresh token for that user is revoked and the caller must re-login.
+   *
+   * hasLegitimateConcurrentSuccessor is the one deliberate exception to that:
+   * two genuinely concurrent, legitimate callers from the SAME browser — the
+   * proxy-level refresh in proxy.ts (fired for a stale /admin/* navigation)
+   * and the browser's own single-flight refresh in api-client.ts (fired by
+   * an already-mounted page's request) — can both present the one token that
+   * just expired within milliseconds of each other. Whichever loses that
+   * race used to be treated as a thief and had `revokeAllForUser` pull the
+   * winner's brand-new session out from under it too, seconds after login —
+   * reproduced live by clearing just the access_token cookie and reloading
+   * an admin page with a second in-flight request already running.
    */
   async rotateRefreshToken(
     presentedToken: string,
@@ -117,6 +129,14 @@ export class TokenService {
     }
 
     if (stored.revokedAt) {
+      if (
+        await this.hasLegitimateConcurrentSuccessor(
+          payload.sub,
+          stored.revokedAt,
+        )
+      ) {
+        return this.issueFreshPairFor(payload.sub);
+      }
       await this.revokeAllForUser(payload.sub);
       throw new UnauthorizedException('Session revoked — please log in again');
     }
@@ -125,29 +145,81 @@ export class TokenService {
       throw new UnauthorizedException('Invalid or expired session');
     }
 
-    // Checked before the token is rotated: a deactivated account must not be
-    // able to trade a valid 30-day refresh token for a fresh access token and
-    // quietly keep its session alive.
-    const owner = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
-      select: { deactivatedAt: true },
-    });
-    if (!owner || owner.deactivatedAt) {
-      await this.revokeAllForUser(payload.sub);
-      throw new UnauthorizedException('Invalid or expired session');
-    }
-
     await this.prisma.refreshToken.update({
       where: { id: payload.jti },
       data: { revokedAt: new Date() },
     });
 
+    return this.issueFreshPairFor(payload.sub);
+  }
+
+  /**
+   * True only when this revoked token's revocation looks like an ordinary
+   * single-token rotation that this same instant produced a live successor
+   * for — never true for a security nuke (revokeAllForUser, used for reuse
+   * detection, logout, and deactivation), which revokes without ever
+   * issuing anything, so it never has one.
+   *
+   * This is what actually distinguishes "two legitimate concurrent callers
+   * raced on one rotation" from "this token was just nuked, and the caller
+   * presenting it again moments later is the thief the nuke exists to stop"
+   * — both leave `revokedAt` set to "now" indistinguishably, so a bare time
+   * check on `revokedAt` alone (an earlier version of this method) would
+   * have handed the just-nuked token's holder a fresh session too. A live
+   * token created within the same narrow window is strong evidence of the
+   * former: `revokeAllForUser` creates nothing, so unless this user's other
+   * session(s) coincidentally rotated in the same instant — no likelier than
+   * the false positive this method exists to prevent — this only fires for
+   * an actual rotation.
+   */
+  private async hasLegitimateConcurrentSuccessor(
+    userId: string,
+    revokedAt: Date,
+  ): Promise<boolean> {
+    if (Date.now() - revokedAt.getTime() > REFRESH_REUSE_GRACE_MS) return false;
+
+    const successor = await this.prisma.refreshToken.findFirst({
+      where: {
+        userId,
+        revokedAt: null,
+        createdAt: {
+          gte: new Date(revokedAt.getTime() - REFRESH_REUSE_GRACE_MS),
+          lte: new Date(revokedAt.getTime() + REFRESH_REUSE_GRACE_MS),
+        },
+      },
+      select: { id: true },
+    });
+    return successor !== null;
+  }
+
+  /**
+   * Deactivation check + issuing a brand-new access/refresh pair — shared by
+   * the normal rotation path and the narrow concurrent-caller grace window
+   * above. Never touches the PRESENTED token's own row: the caller is
+   * responsible for that (already revoked in the normal path; already
+   * revoked by the winning caller in the grace-window path).
+   */
+  private async issueFreshPairFor(
+    userId: string,
+  ): Promise<{ accessToken: string; refreshToken: string; userId: string }> {
+    // Checked on every rotation: a deactivated account must not be able to
+    // trade a valid 30-day refresh token for a fresh access token and
+    // quietly keep its session alive.
+    const owner = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { deactivatedAt: true },
+    });
+    if (!owner || owner.deactivatedAt) {
+      await this.revokeAllForUser(userId);
+      throw new UnauthorizedException('Invalid or expired session');
+    }
+
     const [accessToken, refreshToken] = await Promise.all([
-      Promise.resolve(this.signAccessToken(payload.sub)),
-      this.issueRefreshToken(payload.sub),
+      Promise.resolve(this.signAccessToken(userId)),
+      this.issueRefreshToken(userId),
     ]);
 
-    return { accessToken, refreshToken, userId: payload.sub };
+    return { accessToken, refreshToken, userId };
   }
 
   /** Returns the token's owning userId (for audit logging) if it was valid, else undefined. */
