@@ -45,7 +45,6 @@ describe('TokenService.rotateRefreshToken', () => {
   let prisma: {
     refreshToken: {
       findUnique: jest.Mock;
-      findFirst: jest.Mock;
       create: jest.Mock;
       update: jest.Mock;
       updateMany: jest.Mock;
@@ -69,29 +68,6 @@ describe('TokenService.rotateRefreshToken', () => {
       refreshToken: {
         findUnique: jest.fn(({ where }: { where: { id: string } }) =>
           Promise.resolve(refreshTokens.get(where.id) ?? null),
-        ),
-        findFirst: jest.fn(
-          ({
-            where,
-          }: {
-            where: {
-              userId: string;
-              revokedAt: null;
-              createdAt: { gte: Date; lte: Date };
-            };
-          }) => {
-            for (const row of refreshTokens.values()) {
-              if (row.userId !== where.userId) continue;
-              if (row.revokedAt !== null) continue;
-              if (
-                row.createdAt < where.createdAt.gte ||
-                row.createdAt > where.createdAt.lte
-              )
-                continue;
-              return Promise.resolve(row);
-            }
-            return Promise.resolve(null);
-          },
         ),
         create: jest.fn(
           ({
@@ -176,66 +152,31 @@ describe('TokenService.rotateRefreshToken', () => {
     ).resolves.toMatchObject({ userId });
   });
 
-  it('treats reuse of an already-rotated token LONG after rotation as theft: revokes every session', async () => {
+  it('rejects an IMMEDIATE replay of the just-rotated original token, not just a later one', async () => {
+    // Matches the real e2e regression (test/auth.e2e-spec.ts): rotate once,
+    // then replay the original token right away, in the same test — no
+    // delay at all. An earlier version of this service tolerated exactly
+    // this (mistaking the rotation's own successor for proof of a
+    // legitimate concurrent caller) and let it through with a fresh pair.
     const original = await issueRealToken();
     const first = await tokens.rotateRefreshToken(original);
-
-    // Simulate the rotation having happened well outside the grace window.
-    refreshTokens.get(jtiOf(original))!.revokedAt = new Date(
-      Date.now() - 60_000,
-    );
 
     await expect(tokens.rotateRefreshToken(original)).rejects.toThrow(
       UnauthorizedException,
     );
 
-    // The winner's own fresh token is now dead too — that's the whole point
-    // of reuse detection: once reuse is suspected, nothing survives.
+    // Reuse detection means business: the winner's own fresh token is dead too.
     await expect(tokens.rotateRefreshToken(first.refreshToken)).rejects.toThrow(
       UnauthorizedException,
     );
   });
 
-  it('does NOT tolerate a just-nuked token replayed within the grace window (nuke creates no successor)', async () => {
-    const original = await issueRealToken();
-    const winner = await tokens.rotateRefreshToken(original);
-
-    // A separate reuse event nukes every session for the user — winner's
-    // fresh token included — with no successor ever issued, unlike a normal
-    // rotation. Re-presenting either token immediately afterward (well
-    // inside the grace window) must still be rejected: this is exactly the
-    // gap an earlier, time-only version of this check missed.
-    await tokens.revokeAllForUser(userId);
-
-    await expect(tokens.rotateRefreshToken(original)).rejects.toThrow(
-      UnauthorizedException,
-    );
-    await expect(
-      tokens.rotateRefreshToken(winner.refreshToken),
-    ).rejects.toThrow(UnauthorizedException);
-  });
-
-  it('tolerates the SAME token being re-presented within the grace window: issues a fresh pair instead of nuking the session', async () => {
-    const original = await issueRealToken();
-    const winner = await tokens.rotateRefreshToken(original);
-
-    // The loser of the race presents the same original token moments later
-    // (rotation above already set revokedAt to "now").
-    const loser = await tokens.rotateRefreshToken(original);
-
-    expect(loser.userId).toBe(userId);
-    // The winner's session must still be completely intact — this is the
-    // regression this test guards: before the grace window existed, this
-    // second call would have called revokeAllForUser and killed `winner`.
-    await expect(
-      tokens.rotateRefreshToken(winner.refreshToken),
-    ).resolves.toMatchObject({ userId });
-  });
-
-  it('still blocks a deactivated account inside the grace window', async () => {
+  it('treats reuse of an already-rotated token long after rotation as theft: revokes every session', async () => {
     const original = await issueRealToken();
     await tokens.rotateRefreshToken(original);
-    userDeactivatedAt = new Date();
+
+    const jti = jtiOf(original);
+    refreshTokens.get(jti)!.revokedAt = new Date(Date.now() - 60_000);
 
     await expect(tokens.rotateRefreshToken(original)).rejects.toThrow(
       UnauthorizedException,
@@ -245,6 +186,15 @@ describe('TokenService.rotateRefreshToken', () => {
   it('rejects a token past its own expiry even when never rotated', async () => {
     const original = await issueRealToken();
     refreshTokens.get(jtiOf(original))!.expiresAt = new Date(Date.now() - 1000);
+
+    await expect(tokens.rotateRefreshToken(original)).rejects.toThrow(
+      UnauthorizedException,
+    );
+  });
+
+  it('rejects a deactivated account presenting an otherwise-valid token', async () => {
+    const original = await issueRealToken();
+    userDeactivatedAt = new Date();
 
     await expect(tokens.rotateRefreshToken(original)).rejects.toThrow(
       UnauthorizedException,

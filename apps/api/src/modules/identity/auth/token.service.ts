@@ -6,7 +6,6 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import {
   ACCESS_TOKEN_TTL_SECONDS,
   MFA_PENDING_TOKEN_TTL_SECONDS,
-  REFRESH_REUSE_GRACE_MS,
   REFRESH_TOKEN_TTL_SECONDS,
 } from './auth.constants';
 import { hashToken } from './crypto.util';
@@ -96,16 +95,28 @@ export class TokenService {
    * is presented again, that is treated as reuse of a stolen token — every
    * refresh token for that user is revoked and the caller must re-login.
    *
-   * hasLegitimateConcurrentSuccessor is the one deliberate exception to that:
-   * two genuinely concurrent, legitimate callers from the SAME browser — the
-   * proxy-level refresh in proxy.ts (fired for a stale /admin/* navigation)
-   * and the browser's own single-flight refresh in api-client.ts (fired by
-   * an already-mounted page's request) — can both present the one token that
-   * just expired within milliseconds of each other. Whichever loses that
-   * race used to be treated as a thief and had `revokeAllForUser` pull the
-   * winner's brand-new session out from under it too, seconds after login —
-   * reproduced live by clearing just the access_token cookie and reloading
-   * an admin page with a second in-flight request already running.
+   * No tolerance window here, deliberately. An earlier version of this
+   * method tried to except "two genuinely concurrent legitimate callers
+   * from the same browser" (proxy.ts's own refresh racing the browser's)
+   * from that rule, on the theory that a live successor token created in
+   * the same instant proves the revocation was an ordinary rotation, not a
+   * security nuke. That theory was wrong: an ORDINARY rotation always,
+   * unconditionally, creates exactly that live successor as part of
+   * rotating — so the same signal is produced by a straightforward replay
+   * of the just-rotated token moments later, which is exactly the case
+   * reuse detection exists to catch. CI's own e2e suite caught this
+   * (auth.e2e-spec.ts's rotate-then-replay-the-original test) before it
+   * shipped. The concurrent-caller race this was trying to fix is real
+   * (see proxy.ts's refreshAdminSession doc comment) but is not solvable by
+   * any signal available at this layer — closing it needs either routing
+   * proxy's refresh through the browser's own single-flight mechanism
+   * instead of a second independent caller, or a real parent/child link
+   * between a token and its successor (schema change), neither of which
+   * belongs in a fix for the original session-expiration bug. Left as a
+   * known, narrow limitation: the affected case (a client fetch already in
+   * flight at the exact moment a fresh /admin/* navigation also needs to
+   * refresh) forces a re-login — the same outcome every access-token
+   * expiry produced before this file's other fix, not a new failure mode.
    */
   async rotateRefreshToken(
     presentedToken: string,
@@ -129,14 +140,6 @@ export class TokenService {
     }
 
     if (stored.revokedAt) {
-      if (
-        await this.hasLegitimateConcurrentSuccessor(
-          payload.sub,
-          stored.revokedAt,
-        )
-      ) {
-        return this.issueFreshPairFor(payload.sub);
-      }
       await this.revokeAllForUser(payload.sub);
       throw new UnauthorizedException('Session revoked — please log in again');
     }
@@ -154,50 +157,10 @@ export class TokenService {
   }
 
   /**
-   * True only when this revoked token's revocation looks like an ordinary
-   * single-token rotation that this same instant produced a live successor
-   * for — never true for a security nuke (revokeAllForUser, used for reuse
-   * detection, logout, and deactivation), which revokes without ever
-   * issuing anything, so it never has one.
-   *
-   * This is what actually distinguishes "two legitimate concurrent callers
-   * raced on one rotation" from "this token was just nuked, and the caller
-   * presenting it again moments later is the thief the nuke exists to stop"
-   * — both leave `revokedAt` set to "now" indistinguishably, so a bare time
-   * check on `revokedAt` alone (an earlier version of this method) would
-   * have handed the just-nuked token's holder a fresh session too. A live
-   * token created within the same narrow window is strong evidence of the
-   * former: `revokeAllForUser` creates nothing, so unless this user's other
-   * session(s) coincidentally rotated in the same instant — no likelier than
-   * the false positive this method exists to prevent — this only fires for
-   * an actual rotation.
-   */
-  private async hasLegitimateConcurrentSuccessor(
-    userId: string,
-    revokedAt: Date,
-  ): Promise<boolean> {
-    if (Date.now() - revokedAt.getTime() > REFRESH_REUSE_GRACE_MS) return false;
-
-    const successor = await this.prisma.refreshToken.findFirst({
-      where: {
-        userId,
-        revokedAt: null,
-        createdAt: {
-          gte: new Date(revokedAt.getTime() - REFRESH_REUSE_GRACE_MS),
-          lte: new Date(revokedAt.getTime() + REFRESH_REUSE_GRACE_MS),
-        },
-      },
-      select: { id: true },
-    });
-    return successor !== null;
-  }
-
-  /**
-   * Deactivation check + issuing a brand-new access/refresh pair — shared by
-   * the normal rotation path and the narrow concurrent-caller grace window
-   * above. Never touches the PRESENTED token's own row: the caller is
-   * responsible for that (already revoked in the normal path; already
-   * revoked by the winning caller in the grace-window path).
+   * Deactivation check + issuing a brand-new access/refresh pair — pulled
+   * out of rotateRefreshToken purely so signing the access token and
+   * issuing the refresh token read the same regardless of which caller
+   * needed them.
    */
   private async issueFreshPairFor(
     userId: string,
