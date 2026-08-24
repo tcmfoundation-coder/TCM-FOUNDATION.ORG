@@ -33,3 +33,25 @@ export const DOCUMENT_MIME_TO_EXTENSION: Record<string, string> = {
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
     'docx',
 };
+
+// Covers every allowed upload MIME type, not just documents — used by the
+// download endpoint to pick a filename extension and Content-Type for
+// pre-existing rows that predate the `mimeType` column (see media.service.ts
+// streamById's fallback chain). Kept as the inverse of MIME_TO_MEDIA_TYPE's
+// key set rather than merged into DOCUMENT_MIME_TO_EXTENSION, since that one
+// has a narrower, load-bearing purpose (upload-time Cloudinary `format`).
+export const MIME_TO_EXTENSION: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'image/svg+xml': 'svg',
+  ...DOCUMENT_MIME_TO_EXTENSION,
+  'video/mp4': 'mp4',
+  'video/webm': 'webm',
+  'video/quicktime': 'mov',
+};
+
+export const EXTENSION_TO_MIME: Record<string, string> = Object.fromEntries(
+  Object.entries(MIME_TO_EXTENSION).map(([mime, ext]) => [ext, mime]),
+);

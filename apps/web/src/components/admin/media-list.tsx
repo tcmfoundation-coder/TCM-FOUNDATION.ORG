@@ -16,7 +16,6 @@ import {
   updateMedia,
   type Media,
 } from "@/lib/api/media";
-import { buildCloudinaryAttachmentUrl, sanitizeDownloadFilename } from "@/lib/cloudinary-download";
 
 export function MediaList() {
   const [media, setMedia] = useState<Media[]>([]);
@@ -90,13 +89,15 @@ export function MediaList() {
   }
 
   function handleDownload(mediaItem: Media) {
-    // fl_attachment forces a real Content-Disposition: attachment from
-    // Cloudinary — the plain `download` attribute this used to rely on is
-    // ignored by browsers for cross-origin links (res.cloudinary.com is
-    // cross-origin from the admin app). See cloudinary-download.ts.
+    // Same-origin: /api-proxy rewrites to the API (next.config.ts), which
+    // streams the file from Cloudinary itself and sets Content-Disposition
+    // (cookies ride along automatically, same as any other /api-proxy
+    // request) — see MediaController.download. Not a direct link to the
+    // Cloudinary URL: that relied on the browser's `download` attribute
+    // (ignored cross-origin) and, before that, a hand-built Cloudinary URL
+    // flag that broke in production.
     const link = document.createElement("a");
-    link.href = buildCloudinaryAttachmentUrl(mediaItem.secureUrl, mediaItem.altText);
-    link.download = sanitizeDownloadFilename(mediaItem.altText);
+    link.href = `/api-proxy/media/${mediaItem.id}/download`;
     link.click();
   }
 

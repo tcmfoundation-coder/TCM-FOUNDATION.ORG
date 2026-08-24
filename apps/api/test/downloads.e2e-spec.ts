@@ -295,4 +295,89 @@ describe('Downloadable Resources management (e2e)', () => {
     );
     expect(adminSlugs).toContain((draft.body as Record<string, unknown>).slug);
   });
+
+  // GET /downloads/:slug/file streams the file itself rather than handing
+  // the browser a Cloudinary URL (see media.service.ts's streamById doc
+  // comment: a hand-built Cloudinary URL flag broke in production, and a
+  // cross-origin link can't reliably force a download anyway). Cloudinary
+  // itself is mocked at the fetch layer, same rationale as createFileMedia
+  // not re-exercising the real upload integration in this suite.
+  describe('GET /downloads/:slug/file', () => {
+    const pdfBytes = Buffer.from('%PDF-1.3\nfake pdf bytes for e2e\n%%EOF');
+    let fetchSpy: jest.SpiedFunction<typeof fetch>;
+
+    beforeEach(() => {
+      fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue(
+        new Response(pdfBytes, {
+          status: 200,
+          headers: { 'content-length': String(pdfBytes.length) },
+        }),
+      );
+    });
+
+    afterEach(() => {
+      fetchSpy.mockRestore();
+    });
+
+    it('streams the real bytes with a correct Content-Type and an attachment Content-Disposition', async () => {
+      const editor = await createUser('CONTENT_EDITOR');
+      const media = await prisma.media.create({
+        data: {
+          cloudinaryPublicId: `${prefix}-${Math.random()}.pdf`,
+          secureUrl: 'https://res.cloudinary.com/test/raw/upload/fixture.pdf',
+          type: 'DOCUMENT',
+          mimeType: 'application/pdf',
+          altText: 'Fixture document',
+        },
+      });
+      const slug = `${prefix}-file-route`;
+      await request(app.getHttpServer())
+        .post('/downloads')
+        .set('Cookie', await login(editor.email))
+        .send({ slug, title: 'Q1/Q2 Report', fileId: media.id })
+        .expect(201);
+
+      const response = await request(app.getHttpServer())
+        .get(`/downloads/${slug}/file`)
+        .expect(200);
+
+      expect(fetchSpy).toHaveBeenCalledWith(media.secureUrl);
+      expect(response.headers['content-type']).toBe('application/pdf');
+      expect(response.headers['content-disposition']).toContain('attachment');
+      expect(response.headers['content-disposition']).toContain(
+        'filename="Q1-Q2 Report.pdf"',
+      );
+      expect(Buffer.compare(response.body as Buffer, pdfBytes)).toBe(0);
+    });
+
+    it('404s for a slug that does not exist, without touching storage', async () => {
+      await request(app.getHttpServer())
+        .get(`/downloads/${prefix}-does-not-exist/file`)
+        .expect(404);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('404s for an unpublished download, without touching storage', async () => {
+      const editor = await createUser('CONTENT_EDITOR');
+      const editorCookie = await login(editor.email);
+      const media = await createFileMedia();
+      const slug = `${prefix}-file-unpublished`;
+      const created = await request(app.getHttpServer())
+        .post('/downloads')
+        .set('Cookie', editorCookie)
+        .send({ slug, title: 'Unpublished', fileId: media.id })
+        .expect(201);
+      const id = (created.body as Record<string, unknown>).id as string;
+      await request(app.getHttpServer())
+        .patch(`/downloads/${id}/publish`)
+        .set('Cookie', editorCookie)
+        .send({ isPublished: false })
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .get(`/downloads/${slug}/file`)
+        .expect(404);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+  });
 });
